@@ -1,2 +1,2 @@
 # wisp
-simple Web WhatsApp Client (whatsapp-web.js) with MQTT push 
+simple Web WhatsApp Client with MQTT push 
