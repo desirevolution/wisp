@@ -17,6 +17,27 @@ A lightweight, self-hosted WhatsApp companion with a responsive web UI, messagin
 One WhatsApp account per installation. Authentication belongs to your reverse
 proxy; Wisp has no built-in login or user permissions.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="screenshots/wisp-desktop.png" target="_blank">
+        <img src="screenshots/wisp-desktop.png" width="400" alt="Desktop">
+      </a>
+      <br>
+      <sub><b>Desktop</b></sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/wisp-mobile.png" target="_blank">
+        <img src="screenshots/wisp-mobile.png" width="400" alt="Mobile">
+      </a>
+      <br>
+      <sub><b>Mobile</b></sub>
+    </td>
+  </tr>
+</table>
+
 ## Docker quick start
 
 Docker Compose on Linux **amd64 or arm64** is the supported deployment target.
