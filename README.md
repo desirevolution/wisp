@@ -60,14 +60,6 @@ in your reverse proxy for access from other devices. Proxies in another containe
 should share a Docker network with Wisp and route to `wisp:8080`; no public host
 port is needed in that setup. See [operations](docs/operations.md).
 
-If you publish an image, users can instead set `WISP_IMAGE` in `.env` to the exact
-release image tag and run:
-
-```sh
-docker compose -f compose.image.yml pull
-docker compose -f compose.image.yml up -d
-```
-
 ## Configuration
 
 Deployment settings use `WISP_*` environment variables or CLI flags. Sending is
