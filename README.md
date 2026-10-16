@@ -1,4 +1,4 @@
-# Wisp 1.0.0
+# Wisp
 
 A lightweight, self-hosted WhatsApp companion with a responsive web UI, messaging, media sharing, push notifications, and MQTT integration.
 
