@@ -1,7 +1,7 @@
 name: wisp
 services:
   wisp:
-    build: .
+    image: ghcr.io/desirevolution/wisp:latest
     restart: unless-stopped
     logging:
       driver: json-file
