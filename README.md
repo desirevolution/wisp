@@ -39,16 +39,12 @@ proxy; Wisp has no built-in login or user permissions.
 
 ## Docker quick start
 
-Docker Compose on Linux **amd64 or arm64** is the supported deployment target.
-This candidate includes a source build. Prebuilt GHCR image publication is managed
-by the project owner; this archive does not assume a repository or image name.
-
 From the extracted project directory:
 
 ```sh
 mkdir -p data
 printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env
-docker compose up -d --build
+docker compose up -d
 ```
 
 Open `http://localhost:8080` on the Docker host and link Wisp from WhatsApp's
@@ -91,8 +87,7 @@ docker compose logs --tail=200 wisp
   are never bypassed.
 - After an upgrade, reopen Wisp on each device to refresh the PWA/service worker.
 
-New diagnostics are written to the container log only; there is no diagnostic
-SQLite history or new status screen. Compose rotates logs at 10 MiB × 3 files.
+New diagnostics are written to the container log. Compose rotates logs at 10 MiB × 3 files.
 See [troubleshooting and limitations](docs/limitations.md).
 
 ## Development and release checks
@@ -115,9 +110,6 @@ The checks cover unit and DOM tests, the production frontend build, Go tests/vet
 race checks, a static executable build, and real Chromium tests with mocked
 WhatsApp transport. They do not prove real WhatsApp, mobile keyboard or push
 provider delivery. Use the short [release checklist](docs/release.md).
-
-Direct binaries and Windows are experimental developer paths for now, outside
-the 1.0 support target. Their build script remains available.
 
 ## About this project
 
