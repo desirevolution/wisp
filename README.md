@@ -1,4 +1,4 @@
-# Wisp 1.0.0-rc.1
+# Wisp 1.0.0
 
 A lightweight, self-hosted WhatsApp companion: Go backend, SQLite storage and an
 embedded Lit/Vite PWA for private and group conversations.
