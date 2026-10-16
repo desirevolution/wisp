@@ -1,0 +1,17 @@
+node_modules/
+/public/
+/dist/
+/data/
+*.db
+*.db-*
+.env
+.env.*
+!.env.example
+backups/
+data-before-restore-*/
+release-artifacts/
+playwright-report/
+test-results/
+
+/wisp
+/wisp.exe

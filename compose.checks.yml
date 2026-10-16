@@ -1,0 +1,11 @@
+services:
+  checks:
+    build:
+      context: .
+      dockerfile: Dockerfile.checks
+    init: true
+    shm_size: "1gb"
+    network_mode: none
+    environment:
+      GOPROXY: "off"
+      GOSUMDB: "off"

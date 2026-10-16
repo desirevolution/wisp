@@ -1,0 +1,24 @@
+FROM node:24-bookworm-slim AS node
+FROM golang:1.26-bookworm AS go
+FROM mcr.microsoft.com/playwright:v1.62.1-noble
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=go /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}" \
+    GOPATH=/go GOMODCACHE=/go/pkg/mod GOTOOLCHAIN=local \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+COPY frontend ./frontend
+COPY scripts ./scripts
+COPY tests ./tests
+COPY README.md CHANGELOG.md ./
+CMD ["./scripts/check.sh"]

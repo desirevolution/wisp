@@ -1,0 +1,16 @@
+{
+  "name": "Wisp",
+  "short_name": "Wisp",
+  "description": "A lightweight self-hosted companion for your messages.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b1418",
+  "theme_color": "#0b1f22",
+  "icons": [
+    {"src":"/icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"/icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"/icons/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"},
+    {"src":"/icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "wisp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config frontend/vite.config.js",
+    "build": "vite build --config frontend/vite.config.js",
+    "test": "node --test tests/*.test.js",
+    "test:dom": "node scripts/test-dom.mjs",
+    "test:browser": "node tests/browser-context.spec.mjs",
+    "check": "./scripts/check.sh"
+  },
+  "dependencies": {
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "vite": "^7.3.6",
+    "happy-dom": "20.14.5",
+    "playwright": "1.62.1"
+  },
+  "description": "A lightweight self-hosted WhatsApp companion"
+}

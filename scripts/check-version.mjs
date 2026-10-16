@@ -1,0 +1,11 @@
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const read=name=>readFileSync(name,'utf8');
+const version=JSON.parse(read('package.json')).version;
+const lock=JSON.parse(read('package-lock.json'));
+assert.equal(lock.version,version,'lockfile version');
+assert.equal(lock.packages[''].version,version,'lockfile root version');
+assert.equal(read('internal/appconfig/config.go').match(/const Version = "([^"]+)"/)[1],version,'backend version');
+assert.ok(read('frontend/public/sw.js').includes(`CACHE='wisp-${version}'`),'service worker version');
+assert.ok(read('README.md').startsWith(`# Wisp ${version}\n`),'README version');
+console.log(`Version consistency: ${version}`);

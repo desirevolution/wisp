@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+const {Window}=await import(process.env.WISP_DOM_MODULE||'happy-dom');
+const win=new Window({url:'http://localhost'});
+for(const key of ['document','customElements','HTMLElement','Element','Node','EventTarget','Event','CustomEvent','Document','CSSStyleSheet','MutationObserver','ShadowRoot'])globalThis[key]=win[key];
+globalThis.window=win;
+await import('../frontend/src/components/wisp-connection.js');
+const el=document.createElement('wisp-connection');document.body.append(el);
+el.status={state:'waiting_for_qr',qr:'test-qr'};await el.updateComplete;
+assert.ok(el.querySelector('.pairing-notice').textContent.includes('unofficial WhatsApp'));
+assert.equal(el.querySelectorAll('.pairing-notice').length,1);
+el.status={state:'authenticating'};await el.updateComplete;assert.equal(el.querySelector('.pairing-notice'),null);
+el.status={state:'error',errorCode:'auth_failure'};await el.updateComplete;assert.ok(el.textContent.includes('pair again'));
+el.remove();await win.happyDOM.close();console.log('Connection DOM passed: pairing notice is limited to initial linking; reconnect errors remain actionable.');

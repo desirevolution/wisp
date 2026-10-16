@@ -1,0 +1,32 @@
+name: wisp
+services:
+  wisp:
+    build: .
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    user: "${PUID:-1000}:${PGID:-1000}"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    ports:
+      - "${WISP_BIND_ADDRESS:-127.0.0.1}:${WISP_HTTP_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+      WISP_LISTEN: ":8080"
+      WISP_DATA_DIR: /data
+      # Optional deployment-managed settings override values from the UI/SQLite:
+      # WISP_MQTT_ENABLED: "true"
+      # WISP_MQTT_BROKER: "tcp://mqtt:1883"
+      # WISP_MQTT_USERNAME: wisp
+      # WISP_MQTT_PASSWORD: ${WISP_MQTT_PASSWORD}
+      # WISP_MQTT_TOPIC_PREFIX: wisp
