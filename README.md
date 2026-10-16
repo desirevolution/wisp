@@ -1,7 +1,6 @@
 # Wisp 1.0.0
 
-A lightweight, self-hosted WhatsApp companion: Go backend, SQLite storage and an
-embedded Lit/Vite PWA for private and group conversations.
+A lightweight, self-hosted WhatsApp companion with a responsive web UI, messaging, media sharing, push notifications, and MQTT integration.
 
 > Wisp uses an unofficial WhatsApp library and is not affiliated with WhatsApp/Meta.
 > WhatsApp changes may interrupt the connection. Push delivery and recovery of older media are best effort.
