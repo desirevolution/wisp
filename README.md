@@ -83,12 +83,6 @@ Persist the **entire data directory**: `wisp.db`, `whatsmeow.db` and `media/`.
 Stop Wisp before taking a filesystem backup so the two SQLite databases, WAL files
 and media belong to the same snapshot. Back up before every upgrade.
 
-The 1.0 policy is to retain data across supported forward updates, including any
-required schema migrations. Rollback after a storage change requires restoring
-the matching full backup. Unsupported schemas are rejected, never silently reset.
-There is no promised migration from incompatible pre-1.0 schemas. This candidate
-still opens the existing schema 150 used by 0.15–0.17; a reset is not needed for it.
-
 Commands and recovery steps: [operations](docs/operations.md).
 
 ## Troubleshooting
