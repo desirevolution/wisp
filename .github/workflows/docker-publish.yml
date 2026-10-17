@@ -174,3 +174,67 @@ jobs:
         run: |
           first_tag="$(printf '%s\n' "$TAGS" | head -n 1)"
           docker buildx imagetools inspect "$first_tag"
+          
+  release-binaries:
+    name: Build release binaries
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Prepare embedded frontend for tests
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          test -f public/index.html
+          mkdir -p internal/webui/public
+          cp -a public/. internal/webui/public/
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build release binaries
+        env:
+          OUT: ${{ github.workspace }}/release
+        run: |
+          sh scripts/build-binaries.sh \
+            linux/amd64 \
+            linux/arm64 \
+            linux/arm/v7 \
+            windows/amd64
+
+      - name: Generate checksums
+        working-directory: release
+        run: sha256sum wisp-* > SHA256SUMS
+
+      - name: Upload release files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload \
+            "$RELEASE_TAG" \
+            release/* \
+            --clobber
