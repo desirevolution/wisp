@@ -101,33 +101,50 @@ async function selectChat(id){
   }
   rememberPosition();
   const token=++chatLoadToken;
-  state.selectedChatId=id;state.unread.delete(id);state.view='chat';conversation.resetForChat();app.classList.add('open');
-  const cached=state.messageCache.get(id);
-  if(cached?.messages?.length){
+  state.selectedChatId=id;state.unread.delete(id);state.view='chat';state.keyboardNavActive=false;
+  conversation.resetForChat();app.classList.add('open');
+  const cached=state.messageCache.get(id),hasCached=Boolean(cached);
+  if(hasCached){
     state.messages=cached.messages;state.hasOlder=cached.hasOlder;state.messageLoading=false;
-  }else{
-    state.messageLoading=true;
-  }
-  renderShell();
+  }else state.messageLoading=true;
+  // The chat switch owns this render, including its first scroll position.
+  renderShell({refreshMessages:false});
   await conversation.renderMessages({loading:state.messageLoading});
-  if(cached?.messages?.length){const saved=chatPositions.get(id);if(saved&&!saved.bottom){state.scrollMode='idle';conversation.clearInitialTimer();conversation.restoreScrollAnchor(saved.anchor)}else conversation.scrollBottom({initial:true});focusComposer()}
+  if(token!==chatLoadToken||state.selectedChatId!==id)return;
+  if(hasCached){
+    const saved=chatPositions.get(id);
+    if(saved&&!saved.bottom){state.scrollMode='idle';conversation.clearInitialTimer();conversation.restoreScrollAnchor(saved.anchor)}
+    else conversation.scrollBottom({initial:true});
+    focusComposer();
+  }
   try{
     const data=await apiJson(`/api/chats/${encodeURIComponent(id)}/messages?limit=50`);
     if(token!==chatLoadToken||state.selectedChatId!==id)return;
-    const keep=chatPositions.get(id);
-    const merged=keep&&!keep.bottom&&cached?.messages?.length?[...new Map([...cached.messages,...data].map(m=>[m.id,m])).values()].sort((a,b)=>a.timestamp-b.timestamp||a.id.localeCompare(b.id)):data;
-    state.messages=mergeKnownReactions(merged,state.reactionStates);state.hasOlder=data.length>0;state.messageLoading=false;
-    state.messageCache.set(id,{messages:state.messages,hasOlder:state.hasOlder,at:Date.now()});
-    // Keep the cache deliberately small and short-lived. It exists to make
-    // back-and-forth chat switching instant, not to become a second database.
+    // Cached content may have been scrolled or extended while this request was
+    // pending. Anchor to the live viewport, never the old departure position.
+    const atBottom=conversation.isNearBottom(),anchor=conversation.captureScrollAnchor();
+    const hasOlder=hasCached?state.hasOlder:data.length>0;
+    const merged=[...new Map([...state.messages,...data].map(m=>[m.id,m])).values()]
+      .sort((a,b)=>a.timestamp-b.timestamp||a.id.localeCompare(b.id));
+    state.messages=mergeKnownReactions(merged,state.reactionStates);state.hasOlder=hasOlder;state.messageLoading=false;
+    state.messageCache.set(id,{messages:state.messages,hasOlder,at:Date.now()});
     for(const [chat,entry] of state.messageCache){if(Date.now()-entry.at>MESSAGE_CACHE_TTL)state.messageCache.delete(chat)}
     while(state.messageCache.size>8)state.messageCache.delete(state.messageCache.keys().next().value);
-    await conversation.renderMessages({loading:false});const saved=chatPositions.get(id);if(saved&&!saved.bottom){state.scrollMode='idle';conversation.clearInitialTimer();conversation.restoreScrollAnchor(saved.anchor)}else conversation.scrollBottom({initial:true});focusComposer();
+    await conversation.renderMessages({loading:false});
+    if(token!==chatLoadToken||state.selectedChatId!==id)return;
+    if(hasCached){
+      if(atBottom)conversation.scrollBottom();
+      else {state.scrollMode='idle';conversation.clearInitialTimer();conversation.restoreScrollAnchor(anchor)}
+    }else{
+      conversation.scrollBottom({initial:true});
+      if(!state.keyboardNavActive)focusComposer();
+    }
   }catch(err){
     if(token!==chatLoadToken||state.selectedChatId!==id)return;
     state.messageLoading=false;await conversation.renderMessages({loading:false});throw err;
   }
 }
+
 async function openMessage(chatId,messageId,loaded=null){
   const token=++chatLoadToken;
   state.selectedChatId=chatId;state.view='chat';state.unread.delete(chatId);conversation.resetForChat();app.classList.add('open');
@@ -229,7 +246,7 @@ async function syncReactions(){
   if(state.view==='chat'){await conversation.renderMessages();conversation.restoreScrollAnchor(anchor)}
 }
 async function refreshSelectedMessages(){if(!state.selectedChatId)return;const data=await apiJson(`/api/chats/${encodeURIComponent(state.selectedChatId)}/messages?limit=50`);state.messages=mergeKnownReactions(data,state.reactionStates);state.messageCache.set(state.selectedChatId,{messages:data,hasOlder:state.hasOlder,at:Date.now()});await conversation.renderMessages()}
-function renderShell(){
+function renderShell({refreshMessages=true}={}){
   const connected=state.connection.state==='connected',initialSetup=connected&&state.connection.initialBootstrap===true;
   const paused=!connected||initialSetup;
   const oldMessages=$('#messages');
@@ -261,7 +278,7 @@ function renderShell(){
   syncConnection();syncSettings();if(paused&&$('#newMessages'))$('#newMessages').hidden=true;
   if(connected&&!initialSetup){
     renderChatList();renderConversationHeader();
-    if(state.view==='chat')void conversation.renderMessages().then(()=>{if(suspendedAnchor){state.scrollMode='idle';conversation.restoreScrollAnchor(suspendedAnchor);suspendedAnchor=null}});
+    if(refreshMessages&&state.view==='chat')void conversation.renderMessages().then(()=>{if(suspendedAnchor){state.scrollMode='idle';conversation.restoreScrollAnchor(suspendedAnchor);suspendedAnchor=null}});
 
   }
 }

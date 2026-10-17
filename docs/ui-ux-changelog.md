@@ -41,3 +41,17 @@ service and its snapshots/overlay events. Drafts and cached reading positions re
 Add the existing Wisp icon beside the name in the chat-list header. The brand
 links to the GitHub project in a new tab, with accessible labeling and safe
 external-link attributes.
+
+## Chat-switch flicker/scroll jump
+
+Cached chat refreshes now preserve the live reading anchor instead of restoring
+the position saved when leaving the chat. Keep already loaded history and any
+newly received messages when merging the latest server page, including at the
+bottom. Recognize cached empty chats. Render a chat switch once, set its initial
+position before paint and avoid refocusing the composer when a background refresh
+finishes. Ignore deferred scroll callbacks belonging to a different chat.
+
+A Chromium regression holds a refresh response, scrolls the cached chat while it
+is pending and samples animation frames after release. Before the fix it reproduced
+a jump from 1100px to 600px; after the fix the viewport stays at 1100px with no
+loading skeleton during the cached refresh.

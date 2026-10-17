@@ -5,7 +5,7 @@ import { resolve, extname } from 'node:path';
 import assert from 'node:assert/strict';
 const { chromium } = await import(process.env.WISP_PLAYWRIGHT_MODULE || 'playwright');
 const root = resolve('public'), sent = [], reacted = [], imageSent = [];
-let failSend = false, failReaction = false, mirror = false;
+let failSend = false, failReaction = false, mirror = false, switchRows = false;
 const chat = 'g@g.us', other = 'h@g.us';
 const messages = [
  {id:'m1',chat_id:chat,body:'Treffen wir uns morgen um 18 Uhr?',sender_name:'Arthur',type:'chat',timestamp:1790760000,from_me:0,reactions:[],reaction_version:0},
@@ -39,6 +39,7 @@ const server = createServer(async (req,res) => {
    return json({ok:true,chat_id:chat,message_id:m.id,reactions:m.reactions,version:m.reaction_version});
   }
   if(parts[4]==='messages'&&parts[6]==='context')return parts[5]==='missing'?json({error:'Message not found'},404):json(messages);
+  if(parts[4]==='messages'&&switchRows)return json(url.searchParams.has('beforeTs')?[]:Array.from({length:60},(_,i)=>({id:`${parts[3]}-${i}`,chat_id:parts[3],sender_id:'demo',sender_name:'Demo',body:`Message ${i}: a longer conversation to check scrolling during chat switching.`,type:'chat',timestamp:1790760000+i*60,from_me:i%2,reactions:[]})));
   if(parts[4]==='messages')return json(parts[3]===chat?messages:[{id:'h1',chat_id:other,body:'Hallo',type:'chat',timestamp:1790760000,from_me:0,reactions:[]}]);
  }
  try {const file=resolve(root,'.'+(url.pathname==='/'?'/index.html':url.pathname));if(!file.startsWith(root+'/'))throw new Error();const data=await readFile(file);res.writeHead(200,{'content-type':({'.html':'text/html','.js':'application/javascript','.css':'text/css','.json':'application/json','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png'}[extname(file)]||'application/octet-stream')});res.end(data)}catch{res.writeHead(404);res.end()}
@@ -50,10 +51,11 @@ async function pageFor(options){
  const context=await browser.newContext({serviceWorkers:'block',...options});
  await context.addInitScript(()=>{window.EventSource=class extends EventTarget{constructor(){super();window.testEvents=this;setTimeout(()=>this.dispatchEvent(new Event('open')),20)}close(){}}});
  const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto(base);await page.evaluate(()=>window.startHistoryLength=history.length);await page.locator(`[data-id="${chat}"]`).click();await page.locator('[data-message-id="m1"]').waitFor();return {context,page,errors};
+ await page.goto(base);await page.evaluate(()=>window.startHistoryLength=history.length);await page.locator(`[data-id="${chat}"]`).click();await page.locator(switchRows?'[data-message-id="g@g.us-59"]':'[data-message-id="m1"]').waitFor();return {context,page,errors};
 }
 try{
  browser=await chromium.launch({headless:true,...(process.env.WISP_CHROME?{executablePath:process.env.WISP_CHROME}:{})});
+ if(!process.env.WISP_SWITCH_ONLY){
  const {context,page,errors}=await pageFor({viewport:{width:1200,height:850}});
  const row=id=>page.locator(`[data-message-id="${id}"]`).locator('..').locator('..');
  await row('m1').hover();await row('m1').getByRole('button',{name:'Reply to message',exact:true}).click();
@@ -195,4 +197,27 @@ try{
  await mobile.page.locator('.message-sheet').press('Escape');
  assert.deepEqual(mobile.errors,[]);await mobile.context.close();console.log('Mobile: bottom sheet, preview, direct reactions/removal, reply, backdrop/Escape/Close, direct Back-to-chats and Enter passed');
  mirror=true;const readonly=await pageFor({viewport:{width:1100,height:800}});assert.equal(await readonly.page.locator('.message-actions').count(),0);assert.equal(await readonly.page.locator('#composer').isVisible(),false);await readonly.context.close();console.log('Mirror mode: send actions hidden');
+
+ }
+ // Cached chat refresh must preserve the position reached while the request is pending.
+ mirror=false;switchRows=true;
+ const switching=await pageFor({viewport:{width:1200,height:850}});
+ const sp=switching.page;
+ const waitBottom=()=>sp.waitForFunction(()=>{const el=document.querySelector('#messages');return el.scrollHeight-el.scrollTop-el.clientHeight<2});
+ await waitBottom();
+ await sp.locator('#messages').evaluate(el=>{el.dispatchEvent(new WheelEvent('wheel'));el.scrollTop=600;el.dispatchEvent(new Event('scroll'))});
+ await sp.locator(`[data-id="${other}"]`).click();await sp.locator('[data-message-id="h@g.us-59"]').waitFor();await waitBottom();
+ let finishRefresh;
+ const pendingRefresh=new Promise(done=>{finishRefresh=done});
+ await sp.route('**/api/chats/g%40g.us/messages?limit=50',async route=>{await pendingRefresh;await route.continue()});
+ await sp.locator(`[data-id="${chat}"]`).click();await sp.locator('[data-message-id="g@g.us-59"]').waitFor();
+ await sp.waitForFunction(()=>document.querySelector('#messages').scrollTop>500&&document.querySelector('#messages').scrollTop<700);
+ // Change position after the cached page is shown, before the refresh completes.
+ await sp.locator('#messages').evaluate(el=>{el.dispatchEvent(new WheelEvent('wheel'));el.scrollTop=1100;el.dispatchEvent(new Event('scroll'));window.switchFrames=[];window.recordSwitch=true;const record=()=>{if(!window.recordSwitch)return;window.switchFrames.push({top:el.scrollTop,skeleton:Boolean(el.querySelector('.message-skeleton'))});requestAnimationFrame(record)};requestAnimationFrame(record)});
+ const loaded=sp.waitForResponse(response=>response.url().includes('/api/chats/g%40g.us/messages?limit=50'));
+ finishRefresh();await loaded;
+ await sp.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+ const frames=await sp.evaluate(()=>{window.recordSwitch=false;return window.switchFrames});
+ assert.ok(frames.length>0);assert.ok(frames.every(frame=>!frame.skeleton&&Math.abs(frame.top-1100)<2),JSON.stringify(frames));
+ assert.deepEqual(switching.errors,[]);await switching.context.close();console.log('Chat switching: cached refresh preserves the live reading position without loading frames');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}

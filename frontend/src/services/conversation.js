@@ -211,9 +211,14 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
       state.newWhileReading = 0;
       updateNewButton();
     };
+    // Position the already-rendered page before the next paint. Later frames
+    // only account for layout settling and must still belong to this chat.
+    go();
     requestAnimationFrame(() => {
+      if(chatId!==state.selectedChatId)return;
       go();
       requestAnimationFrame(() => {
+        if(chatId!==state.selectedChatId)return;
         go();
         wireInitialMediaScroll(el);
         if (!initial && state.scrollMode === 'follow') state.scrollMode = 'idle';

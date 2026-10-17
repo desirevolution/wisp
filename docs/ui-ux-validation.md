@@ -49,3 +49,13 @@ were checked, including an overview without action buttons. In-app Back returns
 to chat selection from search results, gallery and ordinary chats; browser history
 length stays unchanged. The mobile sheet retains Close/Escape/background dismissal.
 Draft, focus, scrolling, reaction and image-send checks remain in the Chromium suite.
+
+## Chat-switch regression
+
+Reproduced a cached-refresh jump from 1100px to the old 600px departure position
+in a real headless Chromium before applying the fix. The new browser regression
+uses two 60-message chats, holds the refresh request, changes the live reading
+position, then releases the response and samples animation frames. The viewport
+remains at 1100px without a loading skeleton after the fix. The full unit (28),
+DOM and desktop/mobile browser suites are run for this revision. This verifies
+the reproduced cause, not every device-specific rendering/GPU issue.
