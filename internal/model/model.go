@@ -28,6 +28,8 @@ type Message struct {
 	Type                  string           `json:"type"`
 	Body                  string           `json:"body"`
 	HasMedia              int              `json:"has_media"`
+	MediaWidth            uint32           `json:"media_width,omitempty"`
+	MediaHeight           uint32           `json:"media_height,omitempty"`
 	Timestamp             int64            `json:"timestamp"`
 }
 type Status struct {

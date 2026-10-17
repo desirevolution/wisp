@@ -112,3 +112,12 @@ published through the normal own-message/media events.
 `GET /api/status` includes the running `version` for technical diagnosis. This is
 not proof of WhatsApp connectivity; `/health` returns 503 until WhatsApp is
 connected and the database is healthy.
+
+## Media layout dimensions
+
+Message rows (including context/search results where applicable) and live `message`
+events expose optional positive `media_width` and `media_height` values from the
+original WhatsApp image, video or sticker metadata. Retained descriptors also
+support previously stored messages without changing the database schema.
+Missing or invalid metadata leaves the fields absent. Raw descriptors and keys
+remain private; the API does not fetch image bytes to determine layout.

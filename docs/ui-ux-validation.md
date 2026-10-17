@@ -89,3 +89,31 @@ or browser persistence. The existing backend provides no intrinsic width/height;
 no backend or schema change was made. Go/Docker checks and physical Android/WhatsApp
 checks were not run in this environment. Chromium emulation does not establish that
 all device/GPU-specific flicker is eliminated.
+
+## Mobile keyboard and native camera follow-up
+
+- 31 unit tests, all four DOM suites, Vite build and the complete desktop/mobile
+  Chromium suite pass.
+- A real touch tap with the composer focused opens the message sheet on the
+  first tap. Simulated window resize and message-list scroll leave it open;
+  focus leaves the composer and text remains intact.
+- The mobile camera button opens a file chooser with rear-camera capture hint.
+  Selecting a JPEG creates an image draft without sending or losing the caption.
+- Physical Android keyboard animation, native camera launch and photo capture
+  still require device verification; Chromium emulation does not supply these.
+
+## Intrinsic media dimensions follow-up
+
+- 31 unit tests, all four DOM suites, production frontend build and the full
+  desktop/mobile Chromium suite pass.
+- Browser regression checks show pending portrait and landscape frames with
+  their supplied 1:2 and 16:9 proportions on initial presentation, independently
+  of image downloads. Delayed images still retain their initial frame and do
+  not move following messages. Small media bounds are covered by unit tests.
+- Added Go regression coverage for wrapped image/video/sticker dimensions,
+  invalid/missing/corrupt descriptors, pre-existing retained media and original
+  payload fallback, and dimensions on live message context. These Go tests were
+  not executed: Go/Docker are unavailable and obtaining the Go toolchain did
+  not complete in this environment. Run `go test ./...` before release.
+- Database schema and stored content are unchanged; only positive layout sizes
+  are exposed, never the original descriptors or media keys.

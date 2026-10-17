@@ -1,5 +1,15 @@
 # UI/UX refresh — unreleased
 
+## Mobile keyboard and camera follow-up
+
+- Keep the message action sheet open during keyboard-related height changes and
+  message-list scrolling. Preserve the touch target until the opening click so
+  dismissing the keyboard cannot consume the first menu tap. Width changes still
+  dismiss the menu.
+- Add a mobile camera button using native rear-camera capture. Reuse the existing
+  PNG/JPEG preview, caption, reply, validation and explicit-send flow. Retain the
+  separate image picker; native capture depends on browser/device support.
+
 Follow-up: soften element focus to a one-pixel muted blue-grey outline; retain keyboard visibility. Mobile message actions now open a bottom sheet with message preview, direct emoji selection and a large Reply action.
 
 - Render the application shell through stable Lit templates; retain composer identity on connection updates and keep gallery/conversation nodes separate.
@@ -69,3 +79,12 @@ loading skeleton during the cached refresh.
   dimensions in a bounded in-memory cache for later chat visits. No database or
   backend API changes. Video previews use the same stable frames.
 - Keep an explicit retry surface after an uncached request fails.
+
+## Intrinsic media frames on first presentation
+
+Expose the retained WhatsApp dimensions on message responses, context/search
+results and live messages. Read existing descriptors in one batch without a
+database migration or image download. Portrait and landscape previews now use
+their original proportions from the first render; small known images are not
+enlarged. Only missing metadata uses the existing 3:2 fallback, and an already
+visible frame remains stable while media loads.

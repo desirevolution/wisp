@@ -297,6 +297,8 @@ button:focus-visible{outline:2px solid #53bdeb;outline-offset:2px}
 .image-draft button{background:none;border:0;color:#aebac1;font-size:25px;cursor:pointer;padding:8px}
 .image-btn{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:38px;height:40px;background:none;border:0;color:#aebac1;cursor:pointer;border-radius:8px}
 .image-btn:hover{background:#2a3942}.image-btn:disabled,.image-draft button:disabled{opacity:.45;cursor:default}
+.camera-btn{display:none}
+@media(max-width:700px){.camera-btn{display:flex}}
 @media(max-width:700px){.composer{gap:4px}.image-draft{gap:8px}.image-draft img{width:72px;height:64px}.image-draft b{font-size:14px}.image-draft small{font-size:11px}}
 
 /* Resize the shell above the virtual keyboard, including visual-only browsers. */

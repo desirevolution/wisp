@@ -12,6 +12,11 @@ Status: agreed scope, 17 October 2026. Existing Go API and WhatsApp transport st
 - Sidebar width is draggable, keyboard adjustable, bounded by available space, and remembered on the device.
 - Textarea grows to approximately five lines, then scrolls internally. Desktop Enter sends and Shift+Enter inserts a newline. Mobile Enter inserts a newline; the Send button sends. IME composition must never accidentally send.
 - Store text and reply context per chat on the current device across reload/restart. Image attachments and transient errors/sending status are not persisted. Failed sends preserve input and reply/image context for manual retry; no automatic resend.
+- Mobile message action sheets open on the first tap with the composer focused
+  and survive keyboard-related viewport height changes and list scrolling.
+- Mobile provides a separate native camera capture button (rear-camera hint).
+  Captured PNG/JPEG photos use the existing draft preview and explicit Send;
+  cancellation keeps the draft. The ordinary image picker remains available.
 - While reading older messages, preserve position on incoming messages and show a count/jump button. Incoming messages in other chats only add the existing unread marker (no in-app preview banner). Dedicated mirror follow mode remains available.
 - Connection loss pauses interaction and displays the existing connection screen. Preserve loaded conversation position and drafts until reconnected; do not add an offline outbox.
 - Opening a search result opens its chat/context. The in-app Back button returns to the chat selection, without restoring the search. Guard against stale search responses.
@@ -19,7 +24,7 @@ Status: agreed scope, 17 October 2026. Existing Go API and WhatsApp transport st
 
 - On chat selection, show a quiet loading surface for at least 150 ms once visible. Build the target list with its real layout dimensions while hidden; set the final reading position before revealing. Disable composing/actions until ready. The most recent selection wins.
 - Use cached content without waiting for the server refresh. Apply fresh server data in place afterwards while retaining the live reading anchor.
-- Visual media never gates chat reveal. Reserve intrinsic aspect ratio when known; otherwise use a fixed 3:2 preview. Show the complete image with `object-fit: contain`; do not resize that visit's frame after download. Learn intrinsic dimensions in session memory for later visits. Backend dimensions are currently not provided; no backend/schema change is part of this revision.
+- Visual media never gates chat reveal. Reserve intrinsic aspect ratio when known; otherwise use a fixed 3:2 preview. Show the complete image with `object-fit: contain`; do not resize that visit's frame after download. Learn intrinsic dimensions in session memory for later visits. The backend exposes retained WhatsApp image/video/sticker dimensions on message rows and live messages, including existing stored media; no schema migration or image download is required. Small known media is not enlarged.
 
 ## Technical implementation choices
 

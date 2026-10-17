@@ -8,6 +8,7 @@ const paths = {
   reply: 'M9 5l-6 6 6 6M3 11h11a7 7 0 0 1 7 7',
   more: 'M12 5h.01M12 12h.01M12 19h.01',
   image: 'M3 3h18v18H3zM3 17l6-6 4 4 3-6 5 8M8 7h.01',
+  camera: 'M3 6h4l2-3h6l2 3h4v15H3zM16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   send: 'M22 2L9 15M22 2l-8 20-5-7-7-5z',
   smile: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M8 14s1.5 3 4 3 4-3 4-3M8 9h.01M16 9h.01',
   grid: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',

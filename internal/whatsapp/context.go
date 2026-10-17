@@ -97,6 +97,7 @@ func (s *Service) quote(ctx context.Context, chat string, msg *waE2E.Message) *m
 }
 func (s *Service) addContext(ctx context.Context, m *model.Message, raw *waE2E.Message, chat, sender string) error {
 	var err error
+	m.MediaWidth, m.MediaHeight = mediaDimensions(raw)
 	m.Raw, err = proto.Marshal(raw)
 	if err != nil {
 		return err

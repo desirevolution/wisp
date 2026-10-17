@@ -19,7 +19,15 @@ export class WispMessageList extends LitElement {
 
   constructor(){super();this._mediaFrames=new Map();this.messages=[];this.hasOlder=false;this.loading=false;this.hasSelection=false;this.isGroup=false;this.loadingOlder=false;this.olderError=false;this.sendEnabled=false;this.pendingReactions=new Set();this.menu=null;this.expanded=new Set();
     this._outside=e=>{const panel=this.querySelector('.message-popover');if(this.menu&&!e.composedPath().includes(panel)&&!e.composedPath().includes(this._anchor))this.closePanel()};
-    this._resize=()=>this.closePanel(false);
+    this._viewportWidth=window.innerWidth;
+    this._resize=()=>{
+      const width=window.innerWidth, widthChanged=width!==this._viewportWidth;
+      this._viewportWidth=width;
+      // A fixed bottom sheet survives the keyboard closing and viewport height changes.
+      if(this.menu?.mode==='actions'&&!widthChanged)return;
+      this.closePanel(false);
+    };
+    this._scroll=()=>{if(this.menu?.mode!=='actions')this.closePanel(false)};
   }
   createRenderRoot(){return this}
   willUpdate(changed){if(changed.has('chatId'))this._mediaFrames.clear()}
@@ -36,8 +44,13 @@ export class WispMessageList extends LitElement {
   }
   mediaFailed(event){const el=event.currentTarget;el.classList.add('media-failed');const label=el.parentElement?.querySelector('.media-frame-status');if(label)label.textContent='Media could not be displayed.'}
 
-  connectedCallback(){super.connectedCallback();document.addEventListener('pointerdown',this._outside);window.addEventListener('resize',this._resize);this.addEventListener('scroll',this._resize)}
-  disconnectedCallback(){this.closePanel(false);document.removeEventListener('pointerdown',this._outside);window.removeEventListener('resize',this._resize);this.removeEventListener('scroll',this._resize);super.disconnectedCallback()}
+  connectedCallback(){super.connectedCallback();document.addEventListener('pointerdown',this._outside);window.addEventListener('resize',this._resize);this.addEventListener('scroll',this._scroll)}
+  disconnectedCallback(){this.closePanel(false);document.removeEventListener('pointerdown',this._outside);window.removeEventListener('resize',this._resize);this.removeEventListener('scroll',this._scroll);super.disconnectedCallback()}
+  keepMenuTapTarget(event){
+    // Do not let blur reflow the message list between pointerdown and click.
+    // Focus moves into the sheet after it has opened, dismissing the keyboard then.
+    if(event.pointerType==='touch'&&document.activeElement?.matches('textarea,input,[contenteditable="true"]'))event.preventDefault();
+  }
   emit(type,detail){this.dispatchEvent(new CustomEvent(type,{detail,bubbles:true,composed:true}))}
   closePanel(restore=true){const panel=this.querySelector('.message-popover');if(panel?.matches(':popover-open'))panel.hidePopover();this.menu=null;if(restore&&this._anchor?.isConnected)this._anchor.focus({preventScroll:true})}
   async openPanel(mode,message,event,emoji=''){
@@ -162,7 +175,7 @@ export class WispMessageList extends LitElement {
             ${this.sendEnabled&&!m.deleted?html`<div class="message-actions">
               <button type="button" aria-label="Reply to message" class="desktop-message-action" title="Reply" @click=${()=>this.emit('reply-select',{message:m})}>${icon('reply')}</button>
               <button type="button" class="reaction-action desktop-message-action" aria-label="React to message" title="Add reaction" ?disabled=${this.pendingReactions.has(m.id)} @click=${e=>this.openPanel('picker',m,e)}>${icon('smile')}</button>
-              <button class="mobile-menu-action" type="button" aria-label="Message actions" title="Message actions" aria-haspopup="dialog" aria-expanded=${this.menu?.id===m.id} @click=${e=>this.openPanel('actions',m,e)}>${icon('more')}</button>
+              <button class="mobile-menu-action" type="button" aria-label="Message actions" title="Message actions" aria-haspopup="dialog" aria-expanded=${this.menu?.id===m.id} @pointerdown=${this.keepMenuTapTarget} @click=${e=>this.openPanel('actions',m,e)}>${icon('more')}</button>
             </div>`:null}
           </div>`;
       })}

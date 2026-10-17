@@ -245,6 +245,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rows, ok := out["messages"].([]map[string]any); ok {
+		s.wa.ResolveMediaDimensions(r.Context(), rows)
 		s.wa.ResolveMentionRows(r.Context(), rows, "chat_id", "body", "id")
 	}
 	jsonOut(w, 200, out)
@@ -354,6 +355,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			jsonOut(w, 404, map[string]string{"error": "Message not found"})
 			return
 		}
+		s.wa.ResolveMediaDimensions(r.Context(), rows)
 		s.wa.ResolveMentionRows(r.Context(), rows, "chat_id", "body", "id")
 		jsonOut(w, 200, rows)
 		return
@@ -519,6 +521,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	s.wa.ResolveMediaDimensions(r.Context(), msgs)
 	s.wa.ResolveMentionRows(r.Context(), msgs, "chat_id", "body", "id")
 	jsonOut(w, 200, msgs)
 }

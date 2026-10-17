@@ -9,6 +9,7 @@ test('known dimensions preserve the original ratio within preview bounds',()=>{
   assert.deepEqual(portrait,{ratio:.5,width:180,known:true});
   assert.equal(portrait.width/portrait.ratio,360);
   assert.equal(mediaFrameFor({id:'wide',media_width:1600,media_height:900}).width,420);
+  assert.deepEqual(mediaFrameFor({id:'small',media_width:64,media_height:64}),{ratio:1,width:64,known:true});
 });
 test('loaded media dimensions are reused on later visits; invalid values are ignored',()=>{
   const m={id:'learned',media_id:'file-learned'};

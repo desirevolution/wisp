@@ -9,6 +9,10 @@ A lightweight, self-hosted WhatsApp companion with a responsive web UI, messagin
 
 - Read private/group chats with history, search, media and contact names.
 - Send text, replies, PNG/JPEG images and reactions from the shared emoji subset.
+- On mobile, use the camera button to take a photo with the native device dialog.
+  Photos appear in the image draft before sending; PNG/JPEG and the 10 MiB limit
+  still apply. Camera selection depends on the browser/device; the image picker
+  remains available.
 - Show received reactions, edits and deletion markers, including stored context.
 - Receive live SSE updates, install the PWA and optionally enable per-device Web Push.
 - Publish incoming messages to MQTT; optionally run as a read-only mirror.
@@ -35,6 +39,19 @@ proxy; Wisp has no built-in login or user permissions.
   <br>
   <sub><b>Mobile</b></sub>
 </p>
+
+## Chat presentation
+
+Chat changes use a quiet loading surface for at least 150 ms while the next
+conversation is laid out and positioned out of view. The composer is disabled
+until the chat is ready. Cached messages can be shown without waiting for the
+server refresh; the latest selected chat wins during rapid switching.
+
+Image/video previews reserve their original aspect ratio before downloading, using
+retained WhatsApp dimensions for both new and existing messages. Small images are
+not enlarged. Only missing dimensions use a fixed 3:2 frame; the complete image
+fits inside without cropping. Downloaded dimensions are remembered for later chat visits within the current browser
+session. An already visible frame does not resize when its media finishes loading.
 
 ## Docker quick start
 

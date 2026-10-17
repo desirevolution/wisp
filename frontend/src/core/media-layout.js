@@ -12,6 +12,6 @@ export function mediaFrameFor(message){
   const size=valid(width,height)?{width,height}:dimensions.get(keyFor(message));
   const ratio=size?size.width/size.height:3/2;
   // Fit the original aspect ratio within a 420 × 360 preview; CSS can shrink it.
-  const frameWidth=Math.min(420,360*ratio);
+  const frameWidth=Math.min(420,360*ratio,size?.width??420);
   return {ratio,width:frameWidth,known:Boolean(size)};
 }

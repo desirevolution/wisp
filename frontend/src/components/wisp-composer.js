@@ -65,7 +65,7 @@ export class WispComposer extends LitElement {
     if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(min-width: 701px)').matches) { e.preventDefault(); void this.send(); }
   }
   _attachImage(file) {
-    if (!this.chatId || this.draft.sending || !file) return;
+    if (this.blocked || !this.chatId || this.draft.sending || !file) return;
     let error = '';
     if (!['image/png', 'image/jpeg'].includes(file.type)) error = 'Choose a PNG or JPEG image.';
     else if (!file.size || file.size > 10 * 1024 * 1024) error = 'Image must be between 1 byte and 10 MiB.';
@@ -122,8 +122,10 @@ export class WispComposer extends LitElement {
         ${this.completion?.items.map((x, i) => html`<button type="button" class=${i === this.completionIndex ? 'active' : ''} @mousedown=${e => { e.preventDefault(); this.completionIndex = i; this._acceptCompletion(); }}><span>${x.emoji}</span><small>:${x.names[0]}:</small></button>`)}
       </div>
       <input id="imageFile" type="file" accept="image/png,image/jpeg" hidden ?disabled=${d.sending || this.blocked} @change=${this._onFile}>
+      <input id="cameraFile" type="file" accept="image/jpeg,image/png" capture="environment" hidden ?disabled=${d.sending || this.blocked} @change=${this._onFile}>
       <div class="composer">
         <button class="image-btn" type="button" aria-label="Choose image" title="Choose image (PNG/JPEG, max. 10 MiB)" ?disabled=${d.sending || this.blocked} @click=${() => this.querySelector('#imageFile')?.click()}>${icon('image')}</button>
+        <button class="image-btn camera-btn" type="button" aria-label="Take photo" title="Take photo" ?disabled=${d.sending || this.blocked} @click=${() => this.querySelector('#cameraFile')?.click()}>${icon('camera')}</button>
         <button id="emojiBtn" class="emoji-btn" type="button" aria-label="Emoji" title="Emoji" ?disabled=${d.sending || this.blocked} @click=${this.togglePicker}>${icon('smile')}</button>
         <textarea id="composerInput" rows="1" maxlength="4000" placeholder=${d.image ? "Image caption (optional)" : "Message"} aria-label=${d.image ? "Image caption" : "Message"} .value=${live(d.text)} ?disabled=${d.sending || this.blocked} @paste=${this._onPaste} @input=${this._onInput} @keydown=${this._onKeydown}></textarea>
         <button id="sendBtn" class="send-btn" type="button" aria-label="Send" title="Send" ?disabled=${d.sending || this.blocked || (!d.text.trim() && !d.image)} @click=${this.send}>${icon('send')}</button>

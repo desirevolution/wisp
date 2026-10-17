@@ -40,7 +40,7 @@ const server = createServer(async (req,res) => {
    return json({ok:true,chat_id:chat,message_id:m.id,reactions:m.reactions,version:m.reaction_version});
   }
   if(parts[4]==='messages'&&parts[6]==='context')return parts[5]==='missing'?json({error:'Message not found'},404):json(messages);
-  if(parts[4]==='messages'&&mediaDemo&&parts[3]===other)return json(url.searchParams.has('beforeTs')?[]:[{id:'portrait-message',chat_id:other,sender_name:'Demo',sender_id:'demo',body:'Portrait image',type:'image',has_media:1,media_id:'demo-portrait',media_status:'ready',timestamp:1790764000,from_me:0,reactions:[]},{id:'after-portrait',chat_id:other,body:'This message must not move when the image finishes loading.',type:'chat',timestamp:1790764010,from_me:1,reactions:[]}]);
+  if(parts[4]==='messages'&&mediaDemo&&parts[3]===other)return json(url.searchParams.has('beforeTs')?[]:[{id:'known-portrait',chat_id:other,type:'image',has_media:1,media_id:'known-portrait',media_status:'pending',media_width:600,media_height:1200,timestamp:1790763980,from_me:0,reactions:[]},{id:'known-landscape',chat_id:other,type:'image',has_media:1,media_id:'known-landscape',media_status:'pending',media_width:1600,media_height:900,timestamp:1790763990,from_me:0,reactions:[]},{id:'portrait-message',chat_id:other,sender_name:'Demo',sender_id:'demo',body:'Portrait image',type:'image',has_media:1,media_id:'demo-portrait',media_status:'ready',timestamp:1790764000,from_me:0,reactions:[]},{id:'after-portrait',chat_id:other,body:'This message must not move when the image finishes loading.',type:'chat',timestamp:1790764010,from_me:1,reactions:[]}]);
   if(parts[4]==='messages'&&switchRows)return json(url.searchParams.has('beforeTs')?[]:Array.from({length:60},(_,i)=>({id:`${parts[3]}-${i}`,chat_id:parts[3],sender_id:'demo',sender_name:'Demo',body:`Message ${i}: a longer conversation to check scrolling during chat switching.`,type:'chat',timestamp:1790760000+i*60,from_me:i%2,reactions:[]})));
   if(parts[4]==='messages')return json(parts[3]===chat?messages:[{id:'h1',chat_id:other,body:'Hallo',type:'chat',timestamp:1790760000,from_me:0,reactions:[]}]);
  }
@@ -184,6 +184,28 @@ try{
  await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));
  await mobile.page.locator('#composerInput').fill('Mobile line');await mobile.page.locator('#composerInput').press('Enter');
  assert.equal(await mobile.page.locator('#composerInput').inputValue(),'Mobile line\n');
+ // A touch with the editor focused must open the sheet on the first tap.
+ // Simulate the viewport expansion/scroll that a software keyboard causes;
+ // browser emulation does not provide an actual Android keyboard.
+ await mobile.page.locator('#composerInput').focus();
+ await mr.getByRole('button',{name:'Message actions',exact:true}).tap();
+ await mobile.page.locator('.message-sheet:popover-open').waitFor();
+ await mobile.page.evaluate(()=>{window.dispatchEvent(new Event('resize'));document.querySelector('#messages').dispatchEvent(new Event('scroll'))});
+ await mobile.page.locator('.message-sheet:popover-open').waitFor();
+ assert.equal(await mobile.page.locator('#composerInput').evaluate(el=>el===document.activeElement),false);
+ await mobile.page.locator('.message-sheet').getByRole('button',{name:'Close',exact:true}).click();
+ // Native camera selection uses the existing preview, never automatic sending.
+ const camera=mobile.page.getByRole('button',{name:'Take photo',exact:true});
+ assert.equal(await camera.isVisible(),true);
+ const chooserPromise=mobile.page.waitForEvent('filechooser');await camera.click();
+ const chooser=await chooserPromise;
+ assert.equal(await chooser.element().getAttribute('capture'),'environment');
+ const beforeCameraSend=imageSent.length;
+ await chooser.setFiles({name:'camera.jpg',mimeType:'image/jpeg',buffer:Buffer.from([0xff,0xd8,0xff,0xd9])});
+ await mobile.page.locator('.image-draft').waitFor();
+ assert.equal(imageSent.length,beforeCameraSend);
+ assert.equal(await mobile.page.locator('#composerInput').inputValue(),'Mobile line\n');
+ await mobile.page.getByRole('button',{name:'Remove image',exact:true}).click();
  await mr.getByRole('button',{name:'Message actions',exact:true}).click();await mobile.page.locator('.message-popover').waitFor();
  await mobile.page.locator('.message-sheet').getByRole('button',{name:'Close',exact:true}).click();await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));
  assert.equal(await mobile.page.evaluate(()=>history.length),await mobile.page.evaluate(()=>window.startHistoryLength));
@@ -247,6 +269,10 @@ try{
  const image=mp.locator('[data-message-id="portrait-message"] img'),frame=mp.locator('[data-message-id="portrait-message"] .media-frame');
  assert.equal(await image.evaluate(el=>el.complete),false,'Chat must reveal without waiting for the image');
  assert.equal(await mp.evaluate(()=>document.activeElement.id),'search','Ready chat must not steal focus after the user returns to search');
+ const knownPortrait=await mp.locator('[data-message-id="known-portrait"] .media-frame').boundingBox(),knownLandscape=await mp.locator('[data-message-id="known-landscape"] .media-frame').boundingBox();
+ assert.ok(Math.abs(knownPortrait.width/knownPortrait.height-.5)<.01,JSON.stringify(knownPortrait));
+ assert.ok(Math.abs(knownLandscape.width/knownLandscape.height-16/9)<.01,JSON.stringify(knownLandscape));
+ assert.ok(knownPortrait.width<knownLandscape.width,'Initial pending frames must follow their own intrinsic sizes');
  const beforeImage=await frame.boundingBox(),beforeTail=await mp.locator('[data-message-id="after-portrait"]').boundingBox();
  releaseImage();await mp.locator('[data-message-id="portrait-message"] .media-loaded').waitFor();
  const afterImage=await frame.boundingBox(),afterTail=await mp.locator('[data-message-id="after-portrait"]').boundingBox();
