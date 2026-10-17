@@ -117,3 +117,15 @@ all device/GPU-specific flicker is eliminated.
   not complete in this environment. Run `go test ./...` before release.
 - Database schema and stored content are unchanged; only positive layout sizes
   are exposed, never the original descriptors or media keys.
+
+## Media dimensions test fixture correction
+
+The initial regression fixture omitted `WhatsAppID` on all four messages. SQLite
+accepts the first empty unique value, ignores subsequent message inserts through
+`INSERT OR IGNORE`, then rejects their orphan context rows. Give each fixture its
+message ID as WhatsApp ID and assert successful insertion plus four returned rows.
+Replayed the original schema and actual Save SQL in SQLite: reproduced the old
+foreign-key failure; the corrected fixture inserts all four messages/contexts and
+passes `PRAGMA foreign_key_check`. Go remains unavailable here; rerun
+`go test ./internal/whatsapp -run TestStoredMediaDimensionsWorkBeforeDownloadWithoutSchemaChange`
+and `go test ./...` in CI. No production schema or runtime change was necessary.

@@ -88,3 +88,7 @@ database migration or image download. Portrait and landscape previews now use
 their original proportions from the first render; small known images are not
 enlarged. Only missing metadata uses the existing 3:2 fallback, and an already
 visible frame remains stable while media loads.
+
+Fix the media-dimensions regression test fixtures to use distinct WhatsApp IDs;
+assert that all four test messages are inserted, avoiding a unique-ID collision
+and subsequent foreign-key failure during release checks.

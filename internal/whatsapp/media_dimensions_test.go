@@ -32,12 +32,16 @@ func TestStoredMediaDimensionsWorkBeforeDownloadWithoutSchemaChange(t *testing.T
 	s := mentionService(t)
 	ctx := context.Background()
 	for _, id := range []string{"descriptor", "original", "missing", "corrupt"} {
-		m := model.Message{ID: id, ChatID: "g@g.us", Type: "image", HasMedia: 1, Timestamp: 1}
+		m := model.Message{ID: id, WhatsAppID: id, ChatID: "g@g.us", Type: "image", HasMedia: 1, Timestamp: 1}
 		if id == "original" {
 			m.Raw, _ = proto.Marshal(&waE2E.Message{ImageMessage: &waE2E.ImageMessage{Width: proto.Uint32(600), Height: proto.Uint32(1200)}})
 		}
-		if _, err := s.store.Save(m, "Group", "group"); err != nil {
+		// Each fixture needs its own WhatsApp ID: an empty string also participates
+		// in the unique constraint and would silently skip subsequent inserts.
+		if inserted, err := s.store.Save(m, "Group", "group"); err != nil {
 			t.Fatal(err)
+		} else if !inserted {
+			t.Fatalf("fixture %s was not inserted", id)
 		}
 	}
 	raw, _ := proto.Marshal(&waE2E.Message{ImageMessage: &waE2E.ImageMessage{Width: proto.Uint32(1600), Height: proto.Uint32(900)}})
@@ -50,6 +54,9 @@ func TestStoredMediaDimensionsWorkBeforeDownloadWithoutSchemaChange(t *testing.T
 	rows, err := s.store.Messages("g@g.us", 10, nil, "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(rows) != 4 {
+		t.Fatalf("got %d fixture rows, want 4", len(rows))
 	}
 	s.ResolveMediaDimensions(ctx, rows)
 	for _, row := range rows {
