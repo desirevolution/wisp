@@ -59,3 +59,33 @@ position, then releases the response and samples animation frames. The viewport
 remains at 1100px without a loading skeleton after the fix. The full unit (28),
 DOM and desktop/mobile browser suites are run for this revision. This verifies
 the reproduced cause, not every device-specific rendering/GPU issue.
+
+## Prepared presentation / stable media follow-up
+
+Based on the newly uploaded `wisp-main(7).zip`.
+
+- Unit suite: 31 passing tests, including fallback/known/learned media dimensions.
+- All four DOM suites pass. Application integration waits for the new presentation
+  boundary before interacting with the chat.
+- Vite production build passes.
+- Full Chromium desktop/mobile suite passes, including the previous cached-refresh
+  reading-anchor regression.
+- Additional real-browser frame sampling confirms a visible loading interval of
+  at least 150 ms (frame-sampling tolerance 5 ms), hidden target messages and a
+  disabled composer before reveal, and a positioned list at the first visible frame.
+- A held image request does not block chat reveal. Decoding a 200 × 800 image leaves
+  its fallback frame and following message unchanged. Pending, failed and ready SSE
+  media states also retain frame width/height. A later chat visit uses its learned
+  1:4 ratio with the full image contained in the frame. The preview was visually inspected.
+- Rapid multiple selection reveals only the latest chat. Back cancels pending
+  reveals. An uncached fetch failure shows a stable retry surface; retry restores
+  the chat and enables composing.
+- Returning focus to search during preparation is respected when the chat is ready.
+- English demo screenshot smoke test passes with a separate temporary output folder;
+  the uploaded README screenshots are preserved.
+
+Intrinsic media sizes are held in bounded session memory, not stored in the database
+or browser persistence. The existing backend provides no intrinsic width/height;
+no backend or schema change was made. Go/Docker checks and physical Android/WhatsApp
+checks were not run in this environment. Chromium emulation does not establish that
+all device/GPU-specific flicker is eliminated.

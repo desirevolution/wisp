@@ -62,6 +62,8 @@ export function createInitialAppState() {
     pendingReactions: new Set(),
     reactionStates: new Map(),
     messageLoading: false,
+    chatPreparing: false,
+    chatLoadError: '',
     hasOlder: false,
     loadingOlder: false,
     olderLoadError: false,

@@ -5,7 +5,7 @@ import { resolve, extname } from 'node:path';
 import assert from 'node:assert/strict';
 const { chromium } = await import(process.env.WISP_PLAYWRIGHT_MODULE || 'playwright');
 const root = resolve('public'), sent = [], reacted = [], imageSent = [];
-let failSend = false, failReaction = false, mirror = false, switchRows = false;
+let failSend = false, failReaction = false, mirror = false, switchRows = false, mediaDemo = false;
 const chat = 'g@g.us', other = 'h@g.us';
 const messages = [
  {id:'m1',chat_id:chat,body:'Treffen wir uns morgen um 18 Uhr?',sender_name:'Arthur',type:'chat',timestamp:1790760000,from_me:0,reactions:[],reaction_version:0},
@@ -15,6 +15,7 @@ const messages = [
 const server = createServer(async (req,res) => {
  const url=new URL(req.url,'http://local');
  const json=(data,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data))};
+ if(url.pathname==='/api/media/demo-portrait'){res.writeHead(200,{'content-type':'image/svg+xml'});res.end('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="800"><rect width="200" height="800" fill="#238b88"/></svg>');return}
  if(url.pathname==='/api/status')return json({whatsapp:{state:'connected'},send:{enabled:!mirror}});
  if(url.pathname==='/api/config')return json({sendEnabled:!mirror,mirrorOnly:mirror,followNewMessages:false});
  if(url.pathname==='/api/search')return json({chats:[{id:chat,name:'Gruppe',type:'group'}],messages:[{...messages[0],chat_name:'Gruppe'}]});
@@ -39,6 +40,7 @@ const server = createServer(async (req,res) => {
    return json({ok:true,chat_id:chat,message_id:m.id,reactions:m.reactions,version:m.reaction_version});
   }
   if(parts[4]==='messages'&&parts[6]==='context')return parts[5]==='missing'?json({error:'Message not found'},404):json(messages);
+  if(parts[4]==='messages'&&mediaDemo&&parts[3]===other)return json(url.searchParams.has('beforeTs')?[]:[{id:'portrait-message',chat_id:other,sender_name:'Demo',sender_id:'demo',body:'Portrait image',type:'image',has_media:1,media_id:'demo-portrait',media_status:'ready',timestamp:1790764000,from_me:0,reactions:[]},{id:'after-portrait',chat_id:other,body:'This message must not move when the image finishes loading.',type:'chat',timestamp:1790764010,from_me:1,reactions:[]}]);
   if(parts[4]==='messages'&&switchRows)return json(url.searchParams.has('beforeTs')?[]:Array.from({length:60},(_,i)=>({id:`${parts[3]}-${i}`,chat_id:parts[3],sender_id:'demo',sender_name:'Demo',body:`Message ${i}: a longer conversation to check scrolling during chat switching.`,type:'chat',timestamp:1790760000+i*60,from_me:i%2,reactions:[]})));
   if(parts[4]==='messages')return json(parts[3]===chat?messages:[{id:'h1',chat_id:other,body:'Hallo',type:'chat',timestamp:1790760000,from_me:0,reactions:[]}]);
  }
@@ -61,7 +63,7 @@ try{
  await row('m1').hover();await row('m1').getByRole('button',{name:'Reply to message',exact:true}).click();
  await page.locator('.reply-draft').waitFor();await page.locator('#composerInput').fill('Entwurf A');
  await page.locator(`[data-id="${other}"]`).click();await page.locator('#composerInput').fill('Entwurf B');
- await page.locator(`[data-id="${chat}"]`).click();assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');assert.ok(await page.locator('.reply-draft').isVisible());
+ await page.locator(`[data-id="${chat}"]`).click();await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('chat-preparing'));assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');assert.ok(await page.locator('.reply-draft').isVisible());
  await page.locator('#composerInput').press('Escape');assert.equal(await page.locator('.reply-draft').count(),0);assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');
  await row('m1').hover();await row('m1').getByRole('button',{name:'Reply to message',exact:true}).click();
  failSend=true;await page.locator('#sendBtn').click();await page.getByText('Test send failure',{exact:true}).waitFor();assert.ok(await page.locator('.reply-draft').isVisible());assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');
@@ -220,4 +222,78 @@ try{
  const frames=await sp.evaluate(()=>{window.recordSwitch=false;return window.switchFrames});
  assert.ok(frames.length>0);assert.ok(frames.every(frame=>!frame.skeleton&&Math.abs(frame.top-1100)<2),JSON.stringify(frames));
  assert.deepEqual(switching.errors,[]);await switching.context.close();console.log('Chat switching: cached refresh preserves the live reading position without loading frames');
+
+ // Stage an uncached media chat: first text/layout, then independently loaded image.
+ mediaDemo=true;
+ const staged=await pageFor({viewport:{width:1200,height:850}}),mp=staged.page;
+ let releaseBackend,releaseImage;
+ const backendGate=new Promise(done=>{releaseBackend=done}),imageGate=new Promise(done=>{releaseImage=done});
+ await mp.route('**/api/chats/h%40g.us/messages?limit=50',async route=>{await backendGate;await route.continue()});
+ await mp.route('**/api/media/demo-portrait',async route=>{await imageGate;await route.continue()});
+ await mp.evaluate(()=>{window.presentationFrames=[];window.recordPresentation=true;const sample=()=>{if(!window.recordPresentation)return;const list=document.querySelector('#messages'),loader=document.querySelector('#chatLoading');window.presentationFrames.push({time:performance.now(),title:document.querySelector('#conversationTitle').textContent,preparing:document.querySelector('#app').classList.contains('chat-preparing'),visibility:getComputedStyle(list).visibility,loading:!loader.hidden,disabled:document.querySelector('#composerInput').disabled,bottom:list.scrollHeight-list.scrollTop-list.clientHeight});requestAnimationFrame(sample)};requestAnimationFrame(sample)});
+ await mp.locator(`[data-id="${other}"]`).click();await mp.locator('#chatLoading').waitFor();
+ assert.equal(await mp.locator('#composerInput').isDisabled(),true);
+ assert.equal(await mp.locator('#messages').evaluate(el=>getComputedStyle(el).visibility),'hidden');
+ await mp.locator('#search').focus();
+ releaseBackend();
+ await mp.locator('[data-message-id="portrait-message"]').waitFor();
+ await mp.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+ const presentation=await mp.evaluate(()=>{window.recordPresentation=false;return window.presentationFrames.filter(frame=>frame.title==='Andere Gruppe')});
+ const waiting=presentation.filter(frame=>frame.preparing),revealed=presentation.find(frame=>!frame.preparing);
+ assert.ok(waiting.length>0&&revealed,JSON.stringify(presentation));
+ assert.ok(revealed.time-waiting[0].time>=145,JSON.stringify(presentation));
+ assert.ok(waiting.every(frame=>frame.visibility==='hidden'&&frame.loading&&frame.disabled),JSON.stringify(presentation));
+ assert.ok(presentation.filter(frame=>!frame.preparing).every(frame=>frame.visibility==='visible'&&!frame.loading&&frame.bottom<2));
+ const image=mp.locator('[data-message-id="portrait-message"] img'),frame=mp.locator('[data-message-id="portrait-message"] .media-frame');
+ assert.equal(await image.evaluate(el=>el.complete),false,'Chat must reveal without waiting for the image');
+ assert.equal(await mp.evaluate(()=>document.activeElement.id),'search','Ready chat must not steal focus after the user returns to search');
+ const beforeImage=await frame.boundingBox(),beforeTail=await mp.locator('[data-message-id="after-portrait"]').boundingBox();
+ releaseImage();await mp.locator('[data-message-id="portrait-message"] .media-loaded').waitFor();
+ const afterImage=await frame.boundingBox(),afterTail=await mp.locator('[data-message-id="after-portrait"]').boundingBox();
+ assert.deepEqual(afterImage,beforeImage,'Image decoding must not resize its frame');assert.equal(afterTail.y,beforeTail.y,'Image decoding must not move following messages');
+ assert.equal(await image.evaluate(el=>getComputedStyle(el).objectFit),'contain');
+ if(process.env.WISP_PREPARED_SCREENSHOT)await mp.screenshot({path:process.env.WISP_PREPARED_SCREENSHOT});
+ for(const status of ['pending','failed','ready']){
+   await mp.evaluate(({other,status})=>window.testEvents.dispatchEvent(new MessageEvent('media',{data:JSON.stringify({chatId:other,messageId:'portrait-message',status})})),{other,status});
+   if(status==='ready')await mp.locator('[data-message-id="portrait-message"] .media-loaded').waitFor();
+   else await mp.locator('[data-message-id="portrait-message"] .media-placeholder').waitFor();
+   const transitioned=await frame.boundingBox();
+   assert.equal(transitioned.width,beforeImage.width,`Width changed for media status ${status}`);
+   assert.equal(transitioned.height,beforeImage.height,`Height changed for media status ${status}`);
+ }
+
+ // Only a later visit may use the intrinsic portrait ratio learned above.
+ await mp.locator(`[data-id="${chat}"]`).click();await mp.locator('[data-message-id="g@g.us-59"]').waitFor();
+ await mp.locator(`[data-id="${other}"]`).click();await mp.locator('[data-message-id="portrait-message"]').waitFor();
+ const learned=await frame.boundingBox();assert.ok(Math.abs(learned.width/learned.height-.25)<.01,JSON.stringify(learned));
+ // Latest selection wins; an older preparation and response cannot reveal over it.
+ await mp.evaluate(({chat,other})=>{document.querySelector(`[data-id="${chat}"]`).click();document.querySelector(`[data-id="${other}"]`).click();document.querySelector(`[data-id="${chat}"]`).click()},{chat,other});
+ await mp.locator('[data-message-id="g@g.us-59"]').waitFor();
+ assert.equal(await mp.locator('#conversationTitle').textContent(),'Gruppe');
+ assert.equal(await mp.locator('[data-message-id="portrait-message"]').count(),0);
+ assert.equal(await mp.locator('#chatLoading').isVisible(),false);
+
+ // Back and fetch failures must not expose partial content or leave input active.
+ await mp.getByRole('button',{name:'Back to chats',exact:true}).click();
+ await mp.getByText('Select a chat',{exact:true}).waitFor();
+ await mp.evaluate(({chat,other})=>{document.querySelector(`[data-id="${other}"]`).click();document.querySelector('#back').click()},{chat,other});
+ await mp.evaluate(()=>new Promise(done=>setTimeout(done,200)));
+ assert.equal(await mp.locator('#chatLoading').isVisible(),false);
+ await mp.getByText('Select a chat',{exact:true}).waitFor();
+ // An uncached failure has a stable retry surface rather than revealing an empty chat.
+ const failureContext=await browser.newContext({viewport:{width:1000,height:800},serviceWorkers:'block'});
+ const failurePage=await failureContext.newPage();
+ await failureContext.addInitScript(()=>{window.EventSource=class extends EventTarget{close(){}}});
+ let failNext=true;
+ await failurePage.route('**/api/chats/h%40g.us/messages?limit=50',route=>{if(failNext){failNext=false;return route.fulfill({status:502,contentType:'application/json',body:JSON.stringify({error:'Demo load failure'})})}return route.continue()});
+ await failurePage.goto(base);await failurePage.locator(`[data-id="${other}"]`).click();
+ await failurePage.getByRole('button',{name:'Try again',exact:true}).waitFor();
+ assert.equal(await failurePage.locator('#composerInput').isDisabled(),true);
+ assert.equal(await failurePage.locator('#messages').evaluate(el=>getComputedStyle(el).visibility),'hidden');
+ await failurePage.getByRole('button',{name:'Try again',exact:true}).click();
+ await failurePage.locator('[data-message-id="portrait-message"]').waitFor();
+ assert.equal(await failurePage.locator('#composerInput').isDisabled(),false);
+ await failureContext.close();
+ assert.deepEqual(staged.errors,[]);await staged.context.close();
+ console.log('Prepared chat: 150ms quiet loading, hidden layout, disabled input, stable delayed image, learned ratio and latest selection passed');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}

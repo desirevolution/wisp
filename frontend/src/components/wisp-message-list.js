@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { sameMessageGroup } from '../core/message-groups.js';
 import { icon } from '../lib/icons.js';
+import { mediaFrameFor, rememberMediaSize } from '../core/media-layout.js';
 import './wisp-emoji-picker.js';
 import { rememberEmoji } from '../lib/emoji.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
@@ -9,18 +10,32 @@ import { dayKey, dayLabel, fmt, linkify, mediaLabel, rawId } from '../lib/utils.
 
 export class WispMessageList extends LitElement {
   static properties = {
-    messages: { attribute: false },
+    chatId: { attribute:false }, messages: { attribute: false },
     sendEnabled: { type: Boolean }, pendingReactions: { attribute: false }, menu: { state: true }, expanded: { state: true },
     hasOlder: { type: Boolean },
     loading: { type: Boolean },
     hasSelection: { type: Boolean }, isGroup: { type: Boolean }, loadingOlder: { type: Boolean }, olderError: { type: Boolean }
   };
 
-  constructor(){super();this.messages=[];this.hasOlder=false;this.loading=false;this.hasSelection=false;this.isGroup=false;this.loadingOlder=false;this.olderError=false;this.sendEnabled=false;this.pendingReactions=new Set();this.menu=null;this.expanded=new Set();
+  constructor(){super();this._mediaFrames=new Map();this.messages=[];this.hasOlder=false;this.loading=false;this.hasSelection=false;this.isGroup=false;this.loadingOlder=false;this.olderError=false;this.sendEnabled=false;this.pendingReactions=new Set();this.menu=null;this.expanded=new Set();
     this._outside=e=>{const panel=this.querySelector('.message-popover');if(this.menu&&!e.composedPath().includes(panel)&&!e.composedPath().includes(this._anchor))this.closePanel()};
     this._resize=()=>this.closePanel(false);
   }
   createRenderRoot(){return this}
+  willUpdate(changed){if(changed.has('chatId'))this._mediaFrames.clear()}
+  mediaFrame(m){
+    if(!this._mediaFrames.has(m.id))this._mediaFrames.set(m.id,mediaFrameFor(m));
+    const frame=this._mediaFrames.get(m.id);
+    return `--media-ratio:${frame.ratio};--media-frame-width:${frame.width}px`;
+  }
+  async mediaReady(event,m){
+    const el=event.currentTarget;
+    rememberMediaSize(m,el.naturalWidth||el.videoWidth,el.naturalHeight||el.videoHeight);
+    try{await el.decode?.()}catch{/* Broken images retain the stable fallback frame. */}
+    if(el.isConnected){el.classList.add('media-loaded');el.parentElement?.classList.add('media-ready')}
+  }
+  mediaFailed(event){const el=event.currentTarget;el.classList.add('media-failed');const label=el.parentElement?.querySelector('.media-frame-status');if(label)label.textContent='Media could not be displayed.'}
+
   connectedCallback(){super.connectedCallback();document.addEventListener('pointerdown',this._outside);window.addEventListener('resize',this._resize);this.addEventListener('scroll',this._resize)}
   disconnectedCallback(){this.closePanel(false);document.removeEventListener('pointerdown',this._outside);window.removeEventListener('resize',this._resize);this.removeEventListener('scroll',this._resize);super.disconnectedCallback()}
   emit(type,detail){this.dispatchEvent(new CustomEvent(type,{detail,bubbles:true,composed:true}))}
@@ -91,11 +106,13 @@ export class WispMessageList extends LitElement {
   _retry(messageId){this.dispatchEvent(new CustomEvent('retry-media',{detail:{messageId},bubbles:true,composed:true}))}
   _media(m){
     if(!m.has_media)return null;
-    if(m.media_status==='pending'||!m.media_status)return html`<div class="media-placeholder">${mediaLabel(m.type)} · loading…</div>`;
-    if(m.media_status==='failed')return html`<div class="media-placeholder failed">${mediaLabel(m.type)} · download failed <button class="retry-media" @click=${e=>{e.stopPropagation();this._retry(m.id)}}>Retry</button></div>`;
+    const visual=['image','sticker','video','gif'].includes(m.type);
+    const frame=visual?this.mediaFrame(m):'';
+    if(m.media_status==='pending'||!m.media_status)return visual?html`<div class="media-placeholder media-frame" style=${frame}><span class="media-frame-status">${mediaLabel(m.type)} · loading…</span></div>`:html`<div class="media-placeholder">${mediaLabel(m.type)} · loading…</div>`;
+    if(m.media_status==='failed'){const status=html`${mediaLabel(m.type)} · download failed <button class="retry-media" @click=${e=>{e.stopPropagation();this._retry(m.id)}}>Retry</button>`;return visual?html`<div class="media-placeholder failed media-frame" style=${frame}><div class="media-frame-status">${status}</div></div>`:html`<div class="media-placeholder failed">${status}</div>`}
     const src=`/api/media/${encodeURIComponent(m.media_id)}`;
-    if(m.type==='image'||m.type==='sticker')return html`<a href=${src} target="_blank" rel="noopener noreferrer"><img class="inline-image" src=${src} loading="lazy" alt=${m.body || mediaLabel(m.type)}></a>`;
-    if(m.type==='video'||m.type==='gif')return html`<video class="inline-video" controls preload="metadata" src=${src}></video>`;
+    if(m.type==='image'||m.type==='sticker')return html`<a class="media-frame" style=${frame} href=${src} target="_blank" rel="noopener noreferrer"><span class="media-frame-status">${mediaLabel(m.type)} · loading…</span><img class="inline-image" src=${src} loading="lazy" alt=${m.body||mediaLabel(m.type)} @load=${e=>this.mediaReady(e,m)} @error=${this.mediaFailed}></a>`;
+    if(m.type==='video'||m.type==='gif')return html`<div class="media-frame" style=${frame}><span class="media-frame-status">${mediaLabel(m.type)} · loading…</span><video class="inline-video" controls preload="metadata" src=${src} @loadedmetadata=${e=>this.mediaReady(e,m)} @error=${this.mediaFailed}></video></div>`;
     if(m.type==='audio'||m.type==='ptt')return html`<audio controls preload="metadata" src=${src}></audio>`;
     return html`<a class="document" href=${src} target="_blank" rel="noopener noreferrer">${icon('paperclip')} ${m.filename||m.media_filename||'Document'}</a>`;
   }
@@ -120,7 +137,7 @@ export class WispMessageList extends LitElement {
   }
   render(){
     if(!this.hasSelection)return html`<div class="conversation-empty" role="status"><div class="empty-mark">W</div><b>Select a chat</b><span>Choose a conversation from the chat list.</span></div>`;
-    if(this.loading)return html`<div class="message-skeleton" role="status" aria-label="Loading messages"><span></span><span></span><span></span><span></span><span></span></div>`;
+    if(this.loading)return html`<div class="message-loading" role="status">Loading messages…</div>`;
     if(!this.messages.length)return html`<div class="empty">No mirrored messages yet.</div>`;
     let lastDay=null;
     return html`

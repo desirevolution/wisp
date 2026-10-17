@@ -55,3 +55,17 @@ A Chromium regression holds a refresh response, scrolls the cached chat while it
 is pending and samples animation frames after release. Before the fix it reproduced
 a jump from 1100px to 600px; after the fix the viewport stays at 1100px with no
 loading skeleton during the cached refresh.
+
+## Prepared chat presentation
+
+- Replace the visible skeleton/partial chat with a quiet loading surface (at least
+  150 ms). Render at the actual width while hidden, settle the composer and scroll
+  position, then reveal without a crossfade. Compose and media actions remain
+  disabled during preparation. Search/deep-link context openings follow the same path.
+- Prepare cached rows without waiting for the background refresh; keep refresh
+  updates anchored. Latest selection and Back cancel older pending reveals.
+- Reserve visual-media previews through pending/failed/ready/decoded states.
+  Unknown media uses 3:2; show the whole image without cropping. Learn actual
+  dimensions in a bounded in-memory cache for later chat visits. No database or
+  backend API changes. Video previews use the same stable frames.
+- Keep an explicit retry surface after an uncached request fails.

@@ -65,11 +65,11 @@ let navigation,conversation,gallery,pwa;
 let suspendedAnchor=null;
 const chatPositions=new Map();
 function rememberPosition(){
-  if(state.selectedChatId&&state.view==='chat')chatPositions.set(state.selectedChatId,{anchor:conversation?.captureScrollAnchor(),bottom:conversation?.isNearBottom()});
+  if(!state.chatPreparing&&state.selectedChatId&&state.view==='chat')chatPositions.set(state.selectedChatId,{anchor:conversation?.captureScrollAnchor(),bottom:conversation?.isNearBottom()});
 }
 function backToSelection(){
   const previous=state.selectedChatId;
-  rememberPosition();++chatLoadToken;gallery.cancel();
+  rememberPosition();++chatLoadToken;cancelChatPreparation();gallery.cancel();
   $('#messages')?.closePanel(false);$('#composer')?.closePicker();
   if(state.settingsOpen)closeSettings();
   navigation.clearSearch();conversation.resetForChat();
@@ -86,80 +86,102 @@ async function loadConfig(){const x=await apiJson('/api/config');state.sendEnabl
 async function saveConfig(patch){const x=await apiJson('/api/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(patch)});state.sendEnabled=Boolean(x.sendEnabled);state.mirrorOnly=Boolean(x.mirrorOnly);state.followNewMessages=Boolean(x.followNewMessages);syncSettings()}async function loadChats({render=true}={}){state.chats=await apiJson('/api/chats');if(render)renderChatList();renderConversationHeader()}
 let chatLoadToken=0;
 const MESSAGE_CACHE_TTL=2*60*1000;
+const nextLayoutFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+let chatPreparation=null;
+function cancelChatPreparation(){chatPreparation=null;state.chatPreparing=false;state.chatLoadError='';app.classList.remove('chat-preparing')}
+function beginChatPreparation(token){
+  $('#messages')?.closePanel(false);$('#composer')?.closePicker();
+  state.chatPreparing=true;state.chatLoadError='';state.activePane='right';state.keyboardNavActive=false;
+  const context={token,shownAt:nextLayoutFrame().then(()=>performance.now())};
+  chatPreparation=context;
+}
+const isCurrentChat=token=>token===chatLoadToken&&chatPreparation?.token===token;
+async function waitForLoadingMinimum(token){
+  const context=chatPreparation;if(context?.token!==token)return false;
+  const shownAt=await context.shownAt;
+  const remaining=150-(performance.now()-shownAt);
+  if(remaining>0)await new Promise(resolve=>setTimeout(resolve,remaining));
+  return isCurrentChat(token);
+}
+async function revealPreparedChat(token,position){
+  await conversation.renderMessages({loading:false});
+  await $('#composer')?.updateComplete;
+  if(!await waitForLoadingMinimum(token))return false;
+  // Keep normal layout dimensions while hidden. Position both after composer
+  // sizing and once more in the next frame, then reveal without a transition.
+  for(let i=0;i<2;i++){
+    await nextLayoutFrame();if(!isCurrentChat(token))return false;
+    conversation.positionMessages(position);
+  }
+  if(!isCurrentChat(token))return false;
+  state.chatPreparing=false;chatPreparation=null;
+  renderShell({refreshMessages:false});conversation.updateNewButton();
+  return true;
+}
+async function failChatPreparation(token,error){
+  if(!await waitForLoadingMinimum(token))return;
+  state.messageLoading=false;state.chatLoadError=error.message||'Could not load messages.';
+  renderShell({refreshMessages:false});
+}
 async function selectChat(id){
-  // Selecting the already open chat is idempotent. In particular, repeated
-  // pointer events must not rebuild the responsive shell while a load is active.
   if(id===state.selectedChatId&&state.view==='chat'){
-    // Re-selecting the active chat must never toggle layout state. Restore the
-    // chat-open class (important after responsive/back transitions) and stop.
-    app.classList.add('open');
-    state.unread.delete(id);
-    renderChatList();
-    renderConversationHeader();
-    focusComposer();
-    return;
+    if(state.chatPreparing&&!state.chatLoadError)return;
+    if(!state.chatPreparing){app.classList.add('open');state.unread.delete(id);renderChatList();renderConversationHeader();focusComposer();return}
   }
   rememberPosition();
   const token=++chatLoadToken;
   state.selectedChatId=id;state.unread.delete(id);state.view='chat';state.keyboardNavActive=false;
-  conversation.resetForChat();app.classList.add('open');
-  const cached=state.messageCache.get(id),hasCached=Boolean(cached);
-  if(hasCached){
-    state.messages=cached.messages;state.hasOlder=cached.hasOlder;state.messageLoading=false;
-  }else state.messageLoading=true;
-  // The chat switch owns this render, including its first scroll position.
+  conversation.resetForChat();app.classList.add('open');beginChatPreparation(token);
+  const cached=state.messageCache.get(id),hasCached=Boolean(cached),saved=chatPositions.get(id);
+  if(hasCached){state.messages=cached.messages;state.hasOlder=cached.hasOlder;state.messageLoading=false}
+  else state.messageLoading=true;
   renderShell({refreshMessages:false});
-  await conversation.renderMessages({loading:state.messageLoading});
-  if(token!==chatLoadToken||state.selectedChatId!==id)return;
+  // Fetch concurrently with cached preparation. Convert rejection immediately so
+  // even a fast failure cannot become an unhandled promise during the 150ms hold.
+  const response=apiJson(`/api/chats/${encodeURIComponent(id)}/messages?limit=50`)
+    .then(data=>({data}),error=>({error}));
   if(hasCached){
-    const saved=chatPositions.get(id);
-    if(saved&&!saved.bottom){state.scrollMode='idle';conversation.clearInitialTimer();conversation.restoreScrollAnchor(saved.anchor)}
-    else conversation.scrollBottom({initial:true});
-    focusComposer();
+    if(!await revealPreparedChat(token,{anchor:saved?.anchor,bottom:!saved||saved.bottom}))return;
+    if(token!==chatLoadToken)return;if(state.activePane==='right'&&!state.keyboardNavActive)focusComposer();
   }
-  try{
-    const data=await apiJson(`/api/chats/${encodeURIComponent(id)}/messages?limit=50`);
-    if(token!==chatLoadToken||state.selectedChatId!==id)return;
-    // Cached content may have been scrolled or extended while this request was
-    // pending. Anchor to the live viewport, never the old departure position.
-    const atBottom=conversation.isNearBottom(),anchor=conversation.captureScrollAnchor();
-    const hasOlder=hasCached?state.hasOlder:data.length>0;
-    const merged=[...new Map([...state.messages,...data].map(m=>[m.id,m])).values()]
-      .sort((a,b)=>a.timestamp-b.timestamp||a.id.localeCompare(b.id));
-    state.messages=mergeKnownReactions(merged,state.reactionStates);state.hasOlder=hasOlder;state.messageLoading=false;
-    state.messageCache.set(id,{messages:state.messages,hasOlder,at:Date.now()});
-    for(const [chat,entry] of state.messageCache){if(Date.now()-entry.at>MESSAGE_CACHE_TTL)state.messageCache.delete(chat)}
-    while(state.messageCache.size>8)state.messageCache.delete(state.messageCache.keys().next().value);
+  const result=await response;
+  if(token!==chatLoadToken||state.selectedChatId!==id)return;
+  if(result.error){
+    if(hasCached)showToast('Could not refresh messages. Showing stored messages.','info');
+    else await failChatPreparation(token,result.error);
+    return;
+  }
+  const data=result.data;
+  const atBottom=conversation.isNearBottom(),anchor=conversation.captureScrollAnchor();
+  const hasOlder=hasCached?state.hasOlder:data.length>0;
+  const merged=[...new Map([...state.messages,...data].map(m=>[m.id,m])).values()]
+    .sort((a,b)=>a.timestamp-b.timestamp||a.id.localeCompare(b.id));
+  state.messages=mergeKnownReactions(merged,state.reactionStates);state.hasOlder=hasOlder;state.messageLoading=false;
+  state.messageCache.set(id,{messages:state.messages,hasOlder,at:Date.now()});
+  for(const [chat,entry] of state.messageCache){if(Date.now()-entry.at>MESSAGE_CACHE_TTL)state.messageCache.delete(chat)}
+  while(state.messageCache.size>8)state.messageCache.delete(state.messageCache.keys().next().value);
+  if(hasCached){
     await conversation.renderMessages({loading:false});
     if(token!==chatLoadToken||state.selectedChatId!==id)return;
-    if(hasCached){
-      if(atBottom)conversation.scrollBottom();
-      else {state.scrollMode='idle';conversation.clearInitialTimer();conversation.restoreScrollAnchor(anchor)}
-    }else{
-      conversation.scrollBottom({initial:true});
-      if(!state.keyboardNavActive)focusComposer();
-    }
-  }catch(err){
-    if(token!==chatLoadToken||state.selectedChatId!==id)return;
-    state.messageLoading=false;await conversation.renderMessages({loading:false});throw err;
+    if(atBottom)conversation.scrollBottom();else conversation.positionMessages({anchor});
+  }else if(await revealPreparedChat(token,{anchor:saved?.anchor,bottom:!saved||saved.bottom})){
+    if(state.activePane==='right'&&!state.keyboardNavActive)focusComposer();
   }
 }
 
 async function openMessage(chatId,messageId,loaded=null){
+  rememberPosition();
   const token=++chatLoadToken;
-  state.selectedChatId=chatId;state.view='chat';state.unread.delete(chatId);conversation.resetForChat();app.classList.add('open');
-  state.messageLoading=true;renderShell();
+  state.selectedChatId=chatId;state.view='chat';state.unread.delete(chatId);conversation.resetForChat();app.classList.add('open');beginChatPreparation(token);
+  state.messageLoading=true;renderShell({refreshMessages:false});
   try{
     const data=loaded||await apiJson(`/api/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/context`);
     if(token!==chatLoadToken||state.selectedChatId!==chatId)return;
     state.messages=mergeKnownReactions(data,state.reactionStates);state.hasOlder=true;state.messageLoading=false;
-    await conversation.renderMessages({loading:false});
-    await conversation.highlightMessage(messageId);
-    wireComposer();focusComposer();
-  }catch(err){
-    if(token===chatLoadToken&&state.selectedChatId===chatId){state.messageLoading=false;await conversation.renderMessages({loading:false})}
-    throw err;
-  }
+    if(await revealPreparedChat(token,{messageId})){
+      await conversation.highlightMessage(messageId);if(state.activePane==='right'&&!state.keyboardNavActive)focusComposer();
+    }
+  }catch(error){if(token===chatLoadToken)await failChatPreparation(token,error)}
 }
 async function openQuote(quote){
   const origin=state.selectedChatId,chat=quote.chat_id||origin;
@@ -251,6 +273,7 @@ function renderShell({refreshMessages=true}={}){
   const paused=!connected||initialSetup;
   const oldMessages=$('#messages');
   if(paused&&oldMessages&&!oldMessages.hidden&&!suspendedAnchor){suspendedAnchor=conversation?.captureScrollAnchor();conversation?.clearInitialTimer()}
+  app.classList.toggle('chat-preparing',state.chatPreparing);
   app.classList.toggle('connection-mode',!connected);
   app.classList.toggle('initial-setup-mode',initialSetup);
   render(html`
@@ -264,11 +287,12 @@ function renderShell({refreshMessages=true}={}){
     </aside>
     <div id="sidebarResize" class="sidebar-resize" role="separator" tabindex="0" aria-label="Chat list width" aria-orientation="vertical" title="Resize chat list (arrow keys)" ?hidden=${paused}></div>
     <main class="conversation" ?hidden=${initialSetup}>
-      <div class="conversation-top top"><button class="back" id="back" aria-label="Back to chats" title="Back to chats" ?hidden=${paused||!state.selectedChatId}>${icon('back')}</button><h2 id="conversationTitle">Messages</h2><button class="icon-btn media-btn" id="mediaBtn" aria-label="Media, links and documents" title="Media, links and documents" ?hidden=${paused||!state.selectedChatId}>${icon('grid')}</button></div>
-      <wisp-message-list id="messages" class="messages" ?hidden=${paused||state.view!=='chat'}></wisp-message-list>
+      <div class="conversation-top top"><button class="back" id="back" aria-label="Back to chats" title="Back to chats" ?hidden=${paused||!state.selectedChatId}>${icon('back')}</button><h2 id="conversationTitle">Messages</h2><button class="icon-btn media-btn" id="mediaBtn" aria-label="Media, links and documents" title="Media, links and documents" ?disabled=${state.chatPreparing} ?hidden=${paused||!state.selectedChatId}>${icon('grid')}</button></div>
+      <wisp-message-list id="messages" class="messages" .inert=${state.chatPreparing} aria-busy=${state.chatPreparing?'true':'false'} ?hidden=${paused||state.view!=='chat'}></wisp-message-list>
+      <div id="chatLoading" class="chat-loading" role="status" aria-live="polite" ?hidden=${!state.chatPreparing||paused||state.view!=='chat'}>${state.chatLoadError?html`<div><b>Could not load messages</b><p>${state.chatLoadError}</p><button @click=${()=>selectChat(state.selectedChatId)}>Try again</button></div>`:html`<span>Loading messages…</span>`}</div>
       <wisp-gallery id="gallery" class="messages" ?hidden=${paused||state.view!=='gallery'}></wisp-gallery>
       <button id="newMessages" class="new-messages" hidden></button>
-      <wisp-composer id="composer" ?hidden=${paused||!state.sendEnabled||state.mirrorOnly||!state.selectedChatId||state.view!=='chat'}></wisp-composer>
+      <wisp-composer id="composer" .inert=${state.chatPreparing} ?hidden=${paused||!state.sendEnabled||state.mirrorOnly||!state.selectedChatId||state.view!=='chat'}></wisp-composer>
       <wisp-connection id="connectionView" ?hidden=${connected}></wisp-connection>
     </main>
     <wisp-settings id="settings" ?hidden=${!state.settingsOpen}></wisp-settings>
@@ -306,8 +330,8 @@ async function retryMedia(messageId){
     if(button?.isConnected){button.disabled=false;button.textContent='Retry'}
   }
 }
-function focusComposer(){if(!state.sendEnabled||!state.selectedChatId||state.view!=='chat'||!window.matchMedia('(min-width: 701px)').matches||state.settingsOpen)return;state.activePane='right';state.keyboardNavActive=false;requestAnimationFrame(()=>{$('#composer')?.focusInput();navigation?.updateKeyboardModeIndicator();navigation?.updateActivePane()})}
-function wireComposer(){const composer=$('#composer');if(!composer)return;composer.chatId=state.selectedChatId;composer.requestUpdate()}
+function focusComposer(){if(state.chatPreparing||!state.sendEnabled||!state.selectedChatId||state.view!=='chat'||!window.matchMedia('(min-width: 701px)').matches||state.settingsOpen)return;state.activePane='right';state.keyboardNavActive=false;requestAnimationFrame(()=>{$('#composer')?.focusInput();navigation?.updateKeyboardModeIndicator();navigation?.updateActivePane()})}
+function wireComposer(){const composer=$('#composer');if(!composer)return;composer.chatId=state.selectedChatId;composer.blocked=state.chatPreparing;composer.requestUpdate()}
 function syncConnection(){const el=$('#connectionView');if(el){el.status=state.connection;el.requestUpdate()}}
 function syncSettings(){const el=$('#settings');if(!el)return;el.status=state.connection;el.followNewMessages=state.followNewMessages;el.mirrorOnly=state.mirrorOnly;el.pushEnabled=state.pushEnabled;el.installAvailable=Boolean(state.installPrompt);el.standalone=state.isStandalone;el.requestUpdate()}
 function renderSettings(){const el=$('#settings');if(!el)return;el.hidden=!state.settingsOpen;for(const node of app.querySelectorAll('.sidebar,.conversation,.sidebar-resize'))node.inert=state.settingsOpen;wireSettings(el);syncSettings()}

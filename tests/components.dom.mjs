@@ -82,7 +82,7 @@ await import('../frontend/src/wisp-app.js');
 const app=document.createElement('wisp-app');document.body.append(app);
 async function until(predicate){for(let i=0;i<100;i++){if(predicate())return;await new Promise(r=>setTimeout(r,5))}throw new Error('DOM integration timeout: '+JSON.stringify(document.querySelector('#messages')?.messages))}
 await until(()=>document.querySelector(`[data-id="${chat}"]`));document.querySelector(`[data-id="${chat}"]`).click();
-await until(()=>document.querySelector('[data-message-id="first"]'));
+await until(()=>document.querySelector('[data-message-id="first"]')&&!document.querySelector('#app').classList.contains('chat-preparing'));
 function event(type,data){live.dispatchEvent(new win.MessageEvent(type,{data:JSON.stringify(data)}))}
 const order=()=>[...document.querySelectorAll('.chat')].map(el=>el.dataset.id).join(',');const initialOrder=order();
 event('reaction',{chat_id:second,message_id:'not-loaded',version:1,reactions:[{emoji:'🦊',actor_name:'Bea'}]});

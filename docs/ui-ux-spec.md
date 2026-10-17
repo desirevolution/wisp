@@ -17,6 +17,10 @@ Status: agreed scope, 17 October 2026. Existing Go API and WhatsApp transport st
 - Opening a search result opens its chat/context. The in-app Back button returns to the chat selection, without restoring the search. Guard against stale search responses.
 - The in-app Back button always returns to chat selection. No internal history or popstate handler is used; browser/Android Back retains normal browser behavior. Escape/outside click closes desktop reaction popovers without a Close icon; mobile sheets keep their Close button.
 
+- On chat selection, show a quiet loading surface for at least 150 ms once visible. Build the target list with its real layout dimensions while hidden; set the final reading position before revealing. Disable composing/actions until ready. The most recent selection wins.
+- Use cached content without waiting for the server refresh. Apply fresh server data in place afterwards while retaining the live reading anchor.
+- Visual media never gates chat reveal. Reserve intrinsic aspect ratio when known; otherwise use a fixed 3:2 preview. Show the complete image with `object-fit: contain`; do not resize that visit's frame after download. Learn intrinsic dimensions in session memory for later visits. Backend dimensions are currently not provided; no backend/schema change is part of this revision.
+
 ## Technical implementation choices
 
 Use Lit 3 and the existing store/services; no framework migration. Replace shell string/innerHTML rebuilds with stable Lit templates. Keep message and gallery surfaces as separate stable nodes. Use keyed rendering for messages so updates preserve identity and keyboard focus. Use native popovers with viewport-aware positioning and explicit focus return. Use device-local storage defensively (storage may be blocked/full); keep normal operation available if saving fails. Resize separator supports pointer and keyboard. Navigation uses a direct return-to-selection action and no browser history snapshots.
@@ -33,7 +37,9 @@ Use Lit 3 and the existing store/services; no framework migration. Replace shell
 8. Search -> result -> in-app Back returns to the complete chat selection. Rapid queries cannot display older results. Search errors have an inline retry message.
 9. In-app Back returns to the chat selection from both gallery and chat. Menus/settings create no browser history entries. Browser Back is not intercepted.
 10. Incoming messages do not move an older reading position; their count appears. Another chat gets an unread badge, without an incoming preview toast.
-11. Existing replies/reactions, edit/deletion history, image sending, mirror mode, PWA and connection flows retain their behavior except the explicit changes above.
+11. A cached or uncached switch exposes no unpositioned messages. Loading remains visible >=150 ms, input stays disabled until reveal, and stale preparations cannot reveal over the latest choice. Search/deep-link context opening uses the same preparation.
+12. A delayed portrait image reveals in a reserved frame without blocking the chat. Loading, failed, ready and decoded states preserve that frame; a later chat visit can use learned dimensions.
+13. Existing replies/reactions, edit/deletion history, image sending, mirror mode, PWA and connection flows retain their behavior except the explicit changes above.
 
 ## Open / deferred
 

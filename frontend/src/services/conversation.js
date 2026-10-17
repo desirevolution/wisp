@@ -54,7 +54,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
     messageList.addEventListener('pointerdown', cancelInitialScroll);
 
     messageList.addEventListener('scroll', () => {
-      if (state.scrollMode !== 'initial' && state.scrollMode !== 'prepend' && messageList.scrollTop < 160 && !state.olderLoadError) loadOlder().catch(console.error);
+      if (!state.chatPreparing && state.scrollMode !== 'initial' && state.scrollMode !== 'prepend' && messageList.scrollTop < 160 && !state.olderLoadError) loadOlder().catch(console.error);
       if (isNearBottom(messageList)) {
         state.newWhileReading = 0;
       }
@@ -65,6 +65,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
   async function renderMessages({ loading = state.messageLoading } = {}) {
     const el = ensureMessageList();
     if (!el) return null;
+    el.chatId=state.selectedChatId;
     el.messages = state.messages;
     el.sendEnabled = state.sendEnabled && !state.mirrorOnly;
     el.pendingReactions = state.pendingReactions;
@@ -76,7 +77,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
     el.isGroup = state.chats.find(chat => chat.id === state.selectedChatId)?.type === 'group';
     el.requestUpdate();
     await el.updateComplete;
-    wireInitialMediaScroll(el);
+    if(!state.chatPreparing)wireInitialMediaScroll(el);
     updateNewButton();
     return el;
   }
@@ -100,8 +101,16 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
     el.scrollTop += rect.top - box.top - anchor.offset;
   }
 
+  function positionMessages({anchor=null,bottom=false,messageId=null}={}){
+    clearInitialTimer();state.scrollMode='idle';
+    const el=$('#messages');if(!el)return;
+    if(messageId){[...el.querySelectorAll('[data-message-id]')].find(node=>node.dataset.messageId===messageId)?.scrollIntoView({block:'center'})}
+    else if(bottom||!anchor)el.scrollTop=el.scrollHeight;
+    else restoreScrollAnchor(anchor,el);
+  }
+
   async function loadOlder() {
-    if (!state.selectedChatId || state.loadingOlder || !state.hasOlder || !state.messages.length) return;
+    if (state.chatPreparing || !state.selectedChatId || state.loadingOlder || !state.hasOlder || !state.messages.length) return;
     const chatId = state.selectedChatId;
     state.loadingOlder = true;
     state.olderLoadError = false;
@@ -229,7 +238,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
   function updateNewButton() {
     const button = $('#newMessages');
     if (!button) return;
-    button.hidden = !state.selectedChatId || state.view !== 'chat' || isNearBottom();
+    button.hidden = state.chatPreparing || !state.selectedChatId || state.view !== 'chat' || isNearBottom();
     button.setAttribute('aria-label','Scroll to latest message');
     button.title = 'Scroll to latest message';
     button.style.bottom = `${($('#composer')?.offsetHeight || 0) + 20}px`;
@@ -251,6 +260,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
 
   return {
     resetForChat,
+    positionMessages,
     wireMessageList,
     renderMessages,
     loadOlder,
