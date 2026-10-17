@@ -157,27 +157,6 @@ Output: `screenshots/wisp-desktop.png` (1440 × 1000) and
 `screenshots/wisp-mobile.png` (860 × 1864, 430 × 932 CSS pixels at 2×).
 Existing files with these names are replaced. The README uses these paths.
 
-To write to another folder:
-
-```sh
-./scripts/demo-screenshots.sh --output-dir /tmp/wisp-demo
-```
-
-The runner starts and stops its own loopback server with fictional English
-chats. It needs no Go server, WhatsApp account, Docker or production access.
-Locale (`en-GB`), timezone (`UTC`), date/time and viewport sizes are fixed;
-each capture has a clean browser context. The smoke test checks message content,
-grouping, the composer, browser errors and failed HTTP responses.
-
-Optional: set `WISP_CHROME` to use an existing Chromium executable. For Linux
-containers, Playwright may require `npx playwright install --with-deps chromium`.
-Install an emoji-capable font such as Noto Color Emoji for complete emoji
-rendering. Exact glyphs and font metrics can differ between operating systems;
-use the same browser/fonts when comparing images. Fixture content is in
-`tests/fixtures/demo-data.mjs`. This optional screenshot test is separate from
-`npm run check` and does not change production behavior.
-
->>>>>>> a29a7a5 (ui cleanup)
 ## About this project
 
 This project was built with AI assistance. I'm a lazy dev.
