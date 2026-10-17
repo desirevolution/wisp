@@ -110,8 +110,6 @@ race checks, a static executable build, and real Chromium tests with mocked
 WhatsApp transport. They do not prove real WhatsApp, mobile keyboard or push
 provider delivery. Use the short [release checklist](docs/release.md).
 
-<<<<<<< HEAD
-=======
 ## Generate demo screenshots
 
 With Docker (no local Node or Chromium needed):
