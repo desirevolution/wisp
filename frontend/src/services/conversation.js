@@ -32,7 +32,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
   }
 
   function cancelInitialScroll() {
-    if (state.scrollMode !== 'initial') return;
+    if (!['initial','follow'].includes(state.scrollMode)) return;
     state.scrollMode = 'idle';
     clearInitialTimer();
   }
@@ -204,8 +204,9 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
     if (!el) return;
     if (initial) state.scrollMode = 'initial';
     else if (state.scrollMode !== 'initial') state.scrollMode = 'follow';
+    const chatId=state.selectedChatId;
     const go = () => {
-      if (state.scrollMode === 'prepend') return;
+      if (chatId!==state.selectedChatId || !['initial','follow'].includes(state.scrollMode) || state.connection.state!=='connected') return;
       setScrollTop(el, el.scrollHeight);
       state.newWhileReading = 0;
       updateNewButton();

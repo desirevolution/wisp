@@ -1,4 +1,4 @@
-export function createGallery({ app, store, apiJson, openMessage }) {
+export function createGallery({ app, store, apiJson, openMessage, onViewChange = () => {} }) {
   const state = new Proxy({}, {
     get: (_, key) => store.get(key),
     set: (_, key, value) => { store.set(key, value); return true; },
@@ -6,18 +6,9 @@ export function createGallery({ app, store, apiJson, openMessage }) {
   const $ = selector => app.querySelector(selector);
   let requestToken = 0;
 
-  function ensureGallery() {
-    let el = $('#messages');
-    if (el?.tagName === 'WISP-GALLERY') return el;
-    const next = document.createElement('wisp-gallery');
-    next.id = 'messages';
-    next.className = 'messages';
-    el?.replaceWith(next);
-    wire(next);
-    return next;
-  }
+  function ensureGallery() { const el=$('#gallery'); wire(el); return el; }
 
-  function wire(el = $('#messages')) {
+  function wire(el = $('#gallery')) {
     if (!el || el.tagName !== 'WISP-GALLERY' || el.dataset.wired) return;
     el.dataset.wired = 'true';
     el.addEventListener('gallery-kind', event => open(event.detail.kind));
@@ -40,7 +31,9 @@ export function createGallery({ app, store, apiJson, openMessage }) {
 
   async function open(kind = state.galleryKind || 'media') {
     if (!state.selectedChatId) return;
+    const changed=state.view!=='gallery';
     state.view = 'gallery';
+    if(changed)onViewChange();
     state.galleryKind = kind;
     const token = ++requestToken;
     await render({ loading: true });

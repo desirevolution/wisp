@@ -5,8 +5,8 @@ import { apiJson } from '../lib/api.js';
  * UI side effects that belong to the conversation (opening a chat/message or
  * focusing the composer) are injected so this module stays transport/UI agnostic.
  */
-export function createNavigation({ app, store, selectChat, openMessage, focusComposer }) {
-  let searchTimer = null;
+export function createNavigation({ app, store, selectChat, openMessage, focusComposer, onError = () => {} }) {
+  let searchTimer = null, searchRequest = 0;
   let globalListenersInstalled = false;
   const state = new Proxy({}, {
     get: (_, key) => store.get(key),
@@ -24,7 +24,8 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
     list.filter = state.filter;
     list.searchResults = state.searchResults;
     list.unread = state.unread;
-    list.keyboardSelection = state.keyboardSelection;
+    list.error=state.searchError||'';
+    list.keyboardSelection = state.keyboardNavActive ? state.keyboardSelection : null;
     list.requestUpdate();
   }
 
@@ -37,6 +38,7 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
     hint.hidden = !desktop() || !state.keyboardNavActive || isComposer || isSearch;
     hint.classList.toggle('active', !hint.hidden);
     hint.title = hint.hidden ? '' : 'Arrow keys navigate · Enter opens';
+    const list=$('#chatList');if(list){list.keyboardSelection=state.keyboardNavActive?state.keyboardSelection:null;list.requestUpdate()}
   }
 
   function updateActivePane() {
@@ -48,12 +50,14 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
   function applyKeyboardSelection() {
     const list = $('#chatList');
     if (list) {
-      list.keyboardSelection = state.keyboardSelection;
+      list.keyboardSelection = state.keyboardNavActive ? state.keyboardSelection : null;
       list.requestUpdate();
     }
     const items = keyboardItems();
-    items.forEach(el => el.classList.toggle('keyboard-selected', Boolean(state.keyboardSelection) && el.dataset.key === state.keyboardSelection));
-    items.find(el => el.dataset.key === state.keyboardSelection)?.scrollIntoView({ block: 'nearest' });
+    items.forEach(el => el.classList.toggle('keyboard-selected', state.keyboardNavActive && Boolean(state.keyboardSelection) && el.dataset.key === state.keyboardSelection));
+    const selected=items.find(el=>el.dataset.key===state.keyboardSelection);
+    selected?.scrollIntoView({block:'nearest'});
+    if(state.keyboardNavActive&&document.activeElement?.id!=='search')selected?.focus({preventScroll:true});
     updateKeyboardModeIndicator();
   }
 
@@ -97,44 +101,34 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
   }
 
   function clearSearch() {
-    state.filter = '';
+    state.filter = '';state.searchError='';
     state.searchResults = null;
-    clearTimeout(searchTimer);
+    clearTimeout(searchTimer);++searchRequest;
     const input = $('#search');
     if (input) input.value = '';
     renderChatList();
   }
 
   async function doSearch() {
-    const query = state.filter.trim();
+    const query = state.filter.trim(),token=++searchRequest;
     if (!query) {
       state.searchResults = null;
       renderChatList();
       return;
     }
-    state.searchResults = await apiJson(`/api/search?q=${encodeURIComponent(query)}&limit=50`);
-    renderChatList();
-  }
-
-  function restoreChatKeyboardNavigation(chatId) {
-    document.activeElement?.blur?.();
-    state.activePane = 'left';
-    state.keyboardNavActive = true;
-    state.keyboardSelection = chatId ? `chat:${chatId}` : (keyboardItems()[0]?.dataset.key || null);
-    applyKeyboardSelection();
-    updateActivePane();
+    try{const result=await apiJson(`/api/search?q=${encodeURIComponent(query)}&limit=50`);if(token!==searchRequest||state.filter.trim()!==query)return;state.searchResults=result;state.searchError='';renderChatList()}catch{if(token===searchRequest){state.searchError='Could not search. Change the search or try again.';renderChatList()}}
   }
 
   async function openSearchChat(chatId) {
     clearSearch();
     await selectChat(chatId);
-    restoreChatKeyboardNavigation(chatId);
+    focusComposer();
   }
 
   async function openSearchMessage(chatId, messageId) {
     clearSearch();
     await openMessage(chatId, messageId);
-    restoreChatKeyboardNavigation(chatId);
+    focusComposer();
   }
 
   function wireChatList() {
@@ -145,13 +139,12 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
       list.addEventListener('chat-open', event => {
         const { id, fromSearch } = event.detail;
         state.keyboardSelection = `chat:${id}`;
-        if (fromSearch) void openSearchChat(id);
-        else void selectChat(id);
+        void (fromSearch?openSearchChat(id):selectChat(id)).catch(()=>onError('Could not open chat.'));
       });
       list.addEventListener('message-open', event => {
         const { chatId, messageId } = event.detail;
         state.keyboardSelection = `message:${messageId}`;
-        void openSearchMessage(chatId, messageId);
+        void openSearchMessage(chatId, messageId).catch(()=>onError('Could not open message.'));
       });
     }
     renderChatList();
@@ -160,17 +153,19 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
 
   function wireShell() {
     const search = $('#search');
-    search?.addEventListener('focus', () => {
+    if(search&&!search.dataset.wired){search.dataset.wired='true';
+    search.addEventListener('focus', () => {
       state.activePane = 'left';
       state.keyboardNavActive = false;
       applyKeyboardSelection();
       updateActivePane();
     });
     search?.addEventListener('input', event => {
-      state.filter = event.target.value;
+      state.filter = event.target.value;state.searchError='';++searchRequest;
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => void doSearch(), 180);
     });
+    }
     wireChatList();
     updateActivePane();
   }
@@ -208,7 +203,7 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
         activateChatPane();
         return;
       }
-      if (isComposer || (isEditable && !isSearch)) return;
+      if (isComposer || (isEditable && !isSearch) || (active?.matches('button,[role=separator],summary,a')&&!active?.closest('#chatList'))) return;
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         moveKeyboardSelection(event.key === 'ArrowDown' ? 1 : -1);
@@ -231,6 +226,7 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
 
   return {
     renderChatList,
+    clearSearch,
     wireShell,
     installGlobalListeners,
     updateActivePane,

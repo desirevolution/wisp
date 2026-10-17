@@ -9,7 +9,8 @@
     "test": "node --test tests/*.test.js",
     "test:dom": "node scripts/test-dom.mjs",
     "test:browser": "node tests/browser-context.spec.mjs",
-    "check": "./scripts/check.sh"
+    "check": "./scripts/check.sh",
+    "screenshots": "npm run build && node tests/demo-screenshots.mjs"
   },
   "dependencies": {
     "lit": "^3.3.3"

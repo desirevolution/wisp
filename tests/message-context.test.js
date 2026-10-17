@@ -4,7 +4,7 @@ import { createDrafts } from '../frontend/src/core/drafts.js';
 import { applyReactionState } from '../frontend/src/core/reactions.js';
 import { ALL_EMOJIS } from '../frontend/src/lib/emoji.js';
 
-test('draft text and reply are isolated per chat and reset for a new session',()=>{
+test('in-memory drafts are isolated per chat and reset without a storage adapter',()=>{
  const drafts=createDrafts();drafts.update('a',{text:'answer',reply:{message_id:'m'}});
  drafts.update('b',{text:'other'});
  assert.equal(drafts.get('a').text,'answer');assert.equal(drafts.get('b').reply,null);

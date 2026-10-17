@@ -1,0 +1,14 @@
+services:
+  screenshots:
+    build:
+      context: .
+      dockerfile: Dockerfile.screenshots
+    init: true
+    shm_size: "1gb"
+    network_mode: none
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=512m,mode=1777
+    volumes:
+      - ./screenshots:/screenshots

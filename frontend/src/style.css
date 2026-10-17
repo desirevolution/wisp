@@ -11,7 +11,7 @@
 .chat .chat-head b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat .chat-head small{display:block;white-space:nowrap;text-align:right;margin:0}
 
-.unread-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#00a884;margin-right:7px;vertical-align:1px}.unread-count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#00a884;color:#071b16;font-size:10px;font-style:normal;margin-left:5px}.incoming-notice{position:absolute;z-index:6;right:20px;bottom:20px;width:min(390px,calc(100% - 40px));display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #2a3942;border-radius:10px;background:#202c33;box-shadow:0 8px 30px #0009}.incoming-notice[hidden]{display:none}.incoming-notice div{display:grid;min-width:0;flex:1}.incoming-notice b,.incoming-notice span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.incoming-notice span{color:#8696a0;font-size:13px;margin-top:2px}.incoming-notice button{border:0;border-radius:7px;padding:7px 10px;background:#00a884;color:#071b16;font-weight:600;cursor:pointer}.switch{position:relative;display:inline-block;width:44px;height:24px;flex:none}.switch input{opacity:0;width:0;height:0}.switch span{position:absolute;inset:0;border-radius:12px;background:#3b4a54;cursor:pointer}.switch span:before{content:'';position:absolute;width:18px;height:18px;left:3px;top:3px;border-radius:50%;background:#e9edef;transition:.15s}.switch input:checked+span{background:#00a884}.switch input:checked+span:before{transform:translateX(20px)}@media(max-width:700px){.incoming-notice{right:12px;bottom:12px;width:calc(100% - 24px)}}
+.unread-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#00a884;margin-right:7px;vertical-align:1px}.unread-count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#00a884;color:#071b16;font-size:10px;font-style:normal;margin-left:5px}.switch{position:relative;display:inline-block;width:44px;height:24px;flex:none}.switch input{opacity:0;width:0;height:0}.switch span{position:absolute;inset:0;border-radius:12px;background:#3b4a54;cursor:pointer}.switch span:before{content:'';position:absolute;width:18px;height:18px;left:3px;top:3px;border-radius:50%;background:#e9edef;transition:.15s}.switch input:checked+span{background:#00a884}.switch input:checked+span:before{transform:translateX(20px)}
 
 
 .history-head{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 12px 4px}.load-older{border:1px solid var(--border,#d1d5db);background:var(--panel,#fff);border-radius:999px;padding:7px 14px;cursor:pointer}.load-older:disabled{opacity:.6;cursor:default}.older-hint,.history-start{font-size:12px;opacity:.62;text-align:center}.history-start{padding:5px 10px;border-radius:999px;background:rgba(127,127,127,.08)}
@@ -309,3 +309,95 @@ button:focus-visible{outline:2px solid #53bdeb;outline-offset:2px}
 
 .pairing-notice{margin-top:18px;padding:12px;border:1px solid #40535e;border-radius:8px;background:#111b21;text-align:left;color:#c1d1d7;font-size:12px;line-height:1.5}
 .pairing-notice b{color:#e9edef}.pairing-notice p{margin:5px 0 0;font-size:12px}
+
+/* UI refresh: shared tokens and stable responsive shell. */
+:root{color-scheme:dark;--surface:#182229;--border:#40515c;--muted:#b2c0c8;--focus:#879da6;--accent:#25c5a1;--danger:#ff9b9b}
+.app [hidden]{display:none!important}
+.wisp-icon{display:block;flex:none;pointer-events:none}
+.icon-btn,.back,.emoji-btn,.send-btn{display:inline-flex;align-items:center;justify-content:center}
+.preview,.status,.chat-meta time,.setting-row p,.danger-zone>p,.connection-card p,.connection-card small,.connection-summary,.empty,.conversation-empty,.search-hit span,.search-hit small,.keyboard-hint,.history-loading,.history-start,.emoji-label{color:var(--muted)}
+.search input::placeholder,.composer textarea::placeholder{color:#b2c0c8;opacity:1}
+button,input,textarea,summary,a,[tabindex]{-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:1px solid var(--focus)!important;outline-offset:1px;box-shadow:none}
+.switch:focus-within span{outline:1px solid var(--focus);outline-offset:2px}
+.app .sidebar,.app .conversation{filter:none!important}
+.app.pane-left .sidebar-top,.app.pane-right .conversation-top{box-shadow:inset 0 -1px 0 #6b8a96}
+.chat.keyboard-selected,.search-hit.keyboard-selected{outline:1px solid var(--focus);outline-offset:-2px}
+.messages{padding:18px 5%;line-height:1.4}
+.conversation> .top{grid-row:1}
+.conversation> .messages,.conversation>wisp-connection{grid-row:2;grid-column:1}
+wisp-composer{display:block;grid-row:3;min-width:0}
+.conversation-top h2{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:18px;font-weight:600}
+.message-row{grid-template-columns:fit-content(min(78%,calc(100% - 76px))) max-content;gap:3px 5px;margin:0 0 9px}
+.message-row.outgoing{grid-template-columns:max-content fit-content(min(78%,calc(100% - 76px)))}
+.message-row.grouped{margin-top:-6px}
+.message-row.grouped .bubble{border-top-left-radius:4px}
+.message-row.outgoing.grouped .bubble{border-top-left-radius:8px;border-top-right-radius:4px}
+.message-actions .mobile-menu-action{display:none}
+.message-actions .desktop-message-action{display:inline-flex}
+.message-actions{align-self:center;grid-row:1;opacity:0}
+.message-row:hover .message-actions,.message-row:focus-within .message-actions{opacity:1}
+.message-popover{max-height:min(380px,calc(var(--app-viewport-height,100dvh) - 16px))}
+.message-actions button,.reaction-panel-head button{color:#c6d4dc}
+.composer textarea{line-height:20px;min-height:40px;max-height:120px;overflow-y:auto}
+.emoji-picker,.emoji-complete{bottom:calc(100% - 2px)}
+.send-btn{background:var(--accent)}
+.send-btn:disabled{opacity:.45}
+.document{display:flex;align-items:center;gap:8px}
+.sidebar-resize{position:relative;width:6px;cursor:col-resize;touch-action:none;background:#17252d;z-index:4;outline-offset:-2px!important}
+.sidebar-resize:hover,.sidebar-resize:focus-visible,.resizing .sidebar-resize{background:#637f8a}
+.resizing{cursor:col-resize;user-select:none}
+@media(min-width:701px){
+  .app,.app.open{grid-template-columns:minmax(260px,var(--sidebar-width,360px)) 6px minmax(0,1fr)!important}
+  .app .sidebar{grid-column:1;border-right:0;grid-template-rows:60px auto minmax(0,1fr) auto}
+  .sidebar-resize{grid-column:2}
+  .app .conversation{grid-column:3}
+  .app .back{display:inline-flex!important}
+  .app .back[hidden]{display:none!important}
+}
+@media(max-width:700px){
+  .sidebar-resize{display:none!important}
+  .messages{padding:14px 10px}
+  .top{height:60px}
+  .conversation-top h2{font-size:17px}
+  .message-row{grid-template-columns:fit-content(calc(100% - 45px)) max-content}
+  .message-row.outgoing{grid-template-columns:max-content fit-content(calc(100% - 45px))}
+  .message-actions{opacity:1}
+  .message-actions .desktop-message-action{display:none}
+  .message-actions .mobile-menu-action{display:inline-flex;width:40px;height:44px}
+  .composer textarea{font-size:16px}
+  .emoji-btn,.send-btn,.image-btn{width:40px;min-height:44px}
+}
+/* Touch laptops use the same explicit menu as phones. */
+@media(min-width:701px) and (hover:none){
+  .message-actions{opacity:1}
+  .message-actions .desktop-message-action{display:none}
+  .message-actions .mobile-menu-action{display:inline-flex;width:44px;height:44px}
+}
+/* Explicit hidden state wins over responsive display rules. */
+#app [hidden]{display:none!important}
+
+/* Mobile message actions share one bottom sheet with direct reactions. */
+.message-popover.message-sheet{inset:var(--app-viewport-top,0px) 0 auto 0;width:100%;height:var(--app-viewport-height,100dvh);max-width:none;max-height:none;margin:0;padding:0;background:transparent;border:0;border-radius:0;overflow:hidden;box-shadow:none}
+.message-sheet-backdrop{position:absolute;inset:0;width:100%;height:100%;border:0;background:#0008;padding:0;cursor:default}
+.message-sheet-content{position:absolute;bottom:0;left:0;right:0;display:flex;flex-direction:column;max-height:min(82%,640px);min-height:0;border:1px solid #40535e;border-bottom:0;border-radius:18px 18px 0 0;padding:10px max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));background:#182229;box-shadow:0 -8px 32px #0005}
+.message-sheet-content .reaction-panel-head{flex:none;margin-bottom:8px;font-size:15px}
+.message-sheet-content .reaction-panel-head button{display:grid;place-items:center;min-width:44px;min-height:44px;border-radius:50%}
+.sheet-message-preview{flex:none;margin:0 0 10px;padding:9px 12px;border-left:3px solid #25c5a1;border-radius:6px;background:#111b21;overflow:hidden}
+.sheet-message-preview b{display:block;font-size:12px;color:#91d6c6;margin-bottom:3px}
+.sheet-message-preview span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:13px;color:#c6d4dc;white-space:pre-wrap}
+.sheet-reactions{min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 2px 8px}
+.message-sheet-content .emoji-grid{grid-template-columns:repeat(auto-fit,minmax(44px,1fr));gap:2px}
+.message-sheet-content .emoji-grid button{min-width:44px;min-height:44px;font-size:25px}
+.message-sheet-content .emoji-grid button:disabled{opacity:.45;cursor:wait}
+.sheet-reply{flex:none;display:flex;align-items:center;gap:12px;width:100%;min-height:50px;margin-top:6px;padding:12px;border:0;border-top:1px solid #40515c;border-radius:8px;background:#24343c;color:#e9edef;text-align:left;font:inherit;font-weight:600;cursor:pointer}
+.sheet-reply:hover{background:#30434d}
+
+/* Desktop reaction popovers dismiss on outside click/Escape; mobile keeps Close. */
+@media(min-width:701px){.message-popover:not(.message-sheet) .popover-close{display:none}}
+
+/* Project identity in the chat-list header. */
+.wisp-brand{display:inline-flex;align-items:center;gap:10px;max-width:100%;min-height:44px;border-radius:6px;color:inherit;text-decoration:none;vertical-align:middle}
+.wisp-brand img{display:block;flex:none;width:32px;height:32px;border-radius:8px}
+.wisp-brand span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wisp-brand:hover{color:#b6eee1}

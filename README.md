@@ -1,4 +1,4 @@
-# Wisp
+# Wisp 1.0.0
 
 A lightweight, self-hosted WhatsApp companion with a responsive web UI, messaging, media sharing, push notifications, and MQTT integration.
 
@@ -20,8 +20,8 @@ proxy; Wisp has no built-in login or user permissions.
 ## Screenshots
 
 <p align="center">
-  <a href="screenshots/wisp-desktop.png" target="_blank">
-    <img src="screenshots/wisp-desktop.png" width="1200" alt="Desktop">
+  <a href="screenshots/wisp-desktop.png?v=1" target="_blank">
+    <img src="screenshots/wisp-desktop.pngi?v=1" width="1200" alt="Desktop">
   </a>
   <br>
   <sub><b>Desktop</b></sub>
@@ -30,8 +30,8 @@ proxy; Wisp has no built-in login or user permissions.
 <br>
 
 <p align="center">
-  <a href="screenshots/wisp-mobile.png" target="_blank">
-    <img src="screenshots/wisp-mobile.png" width="400" alt="Mobile">
+  <a href="screenshots/wisp-mobile.png?v=1" target="_blank">
+    <img src="screenshots/wisp-mobile.png?v=1" width="400" alt="Mobile">
   </a>
   <br>
   <sub><b>Mobile</b></sub>
@@ -111,6 +111,76 @@ race checks, a static executable build, and real Chromium tests with mocked
 WhatsApp transport. They do not prove real WhatsApp, mobile keyboard or push
 provider delivery. Use the short [release checklist](docs/release.md).
 
+<<<<<<< HEAD
+=======
+## Generate demo screenshots
+
+With Docker (no local Node or Chromium needed):
+
+```sh
+./scripts/demo-screenshots-docker.sh
+```
+
+Or run Compose directly (Linux; sets ownership to your user):
+
+```sh
+LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose -f compose.screenshots.yml run --rm --build screenshots
+```
+
+The image builds the frontend and includes matching Playwright/Chromium and
+browser fonts. Captures are written to the host's `screenshots/` folder and
+replace the two README images. Package/image downloads need network access
+during the first build; the screenshot container itself runs without external
+network access and uses only its internal mock server. After the first build,
+you can omit `--build` until code changes. Rebuild after changing the UI or fixtures.
+
+The dedicated Docker start script sets the output file ownership automatically.
+Direct Compose uses UID/GID 1000 by default; adjust `LOCAL_UID`/`LOCAL_GID` if
+needed. If the Playwright dependency is upgraded, update the matching image tag
+in `Dockerfile.screenshots` too.
+
+Without Docker, use the following setup in the project directory:
+
+One-time setup (in the project directory):
+
+```sh
+npm ci
+npx playwright install chromium
+```
+
+Build and capture English desktop/mobile demo screenshots:
+
+```sh
+npm run screenshots
+# Or use the dedicated start script:
+./scripts/demo-screenshots.sh
+```
+
+Output: `screenshots/wisp-desktop.png` (1440 × 1000) and
+`screenshots/wisp-mobile.png` (860 × 1864, 430 × 932 CSS pixels at 2×).
+Existing files with these names are replaced. The README uses these paths.
+
+To write to another folder:
+
+```sh
+./scripts/demo-screenshots.sh --output-dir /tmp/wisp-demo
+```
+
+The runner starts and stops its own loopback server with fictional English
+chats. It needs no Go server, WhatsApp account, Docker or production access.
+Locale (`en-GB`), timezone (`UTC`), date/time and viewport sizes are fixed;
+each capture has a clean browser context. The smoke test checks message content,
+grouping, the composer, browser errors and failed HTTP responses.
+
+Optional: set `WISP_CHROME` to use an existing Chromium executable. For Linux
+containers, Playwright may require `npx playwright install --with-deps chromium`.
+Install an emoji-capable font such as Noto Color Emoji for complete emoji
+rendering. Exact glyphs and font metrics can differ between operating systems;
+use the same browser/fonts when comparing images. Fixture content is in
+`tests/fixtures/demo-data.mjs`. This optional screenshot test is separate from
+`npm run check` and does not change production behavior.
+
+>>>>>>> a29a7a5 (ui cleanup)
 ## About this project
 
 This project was built with AI assistance. I'm a lazy dev.

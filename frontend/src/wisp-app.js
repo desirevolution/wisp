@@ -7,7 +7,7 @@ import './components/wisp-composer.js';
 import './components/wisp-connection.js';
 import './components/wisp-settings.js';
 import './components/wisp-gallery.js';
-import { $, esc, mediaLabel, displayName } from './lib/utils.js';
+import { $, displayName } from './lib/utils.js';
 import { apiJson } from './lib/api.js';
 import { createEventBus } from './core/event-bus.js';
 import { connectLiveEvents } from './services/live-events.js';
@@ -17,7 +17,10 @@ import { createNavigation } from './services/navigation.js';
 import { createConversation } from './services/conversation.js';
 import { createGallery } from './services/gallery.js';
 import { createPwaService } from './services/pwa.js';
-import { LitElement, html } from 'lit';
+import { LitElement, html, render } from 'lit';
+import { live } from 'lit/directives/live.js';
+import { icon } from './lib/icons.js';
+import { installSidebarResize } from './services/sidebar-resize.js';
 
 /** Root Lit component and top-level Wisp application orchestration. */
 export class WispApp extends LitElement {
@@ -55,10 +58,28 @@ const state=new Proxy({}, {
   get:(_,key)=>store.get(key),
   set:(_,key,value)=>{store.set(key,value);return true},
 });
-let noticeTimer=null,toastTimer=null,settingsReturnFocus=null,settingsKeyHandler=null;
+let toastTimer=null,settingsReturnFocus=null,settingsKeyHandler=null;
 const earlyMediaEvents=new Map();
 function showToast(message,kind='error'){let el=$('#appToast');if(!el){el=document.createElement('div');el.id='appToast';app.appendChild(el)}el.className=`app-toast ${kind}`;el.textContent=message;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{el.hidden=true},4500)}
 let navigation,conversation,gallery,pwa;
+let suspendedAnchor=null;
+const chatPositions=new Map();
+function rememberPosition(){
+  if(state.selectedChatId&&state.view==='chat')chatPositions.set(state.selectedChatId,{anchor:conversation?.captureScrollAnchor(),bottom:conversation?.isNearBottom()});
+}
+function backToSelection(){
+  const previous=state.selectedChatId;
+  rememberPosition();++chatLoadToken;gallery.cancel();
+  $('#messages')?.closePanel(false);$('#composer')?.closePicker();
+  if(state.settingsOpen)closeSettings();
+  navigation.clearSearch();conversation.resetForChat();
+  state.selectedChatId=null;state.view='chat';state.activePane='left';
+  state.keyboardNavActive=window.matchMedia('(min-width: 701px)').matches;
+  state.keyboardSelection=previous?`chat:${previous}`:null;
+  app.classList.remove('open');renderShell();
+  requestAnimationFrame(()=>{if(state.selectedChatId||app.classList.contains('open'))return;const chat=[...app.querySelectorAll('#chatList .chat')].find(el=>el.dataset.id===previous);(chat||$('#settingsBtn'))?.focus({preventScroll:true})});
+}
+
 function connectionLabel(){if(state.connection.state==='connected'&&state.connection.syncing)return state.connection.syncPhase==='importing_history'?'Syncing chats…':state.connection.syncPhase==='settling_history'?'Finishing sync…':state.connection.syncPhase==='checking_history'?'Checking history…':'Syncing…';return({starting:'Starting…',disconnecting:'Disconnecting…',reconnecting:'Reconnecting…',waiting_for_qr:'Waiting for QR scan',authenticating:'Signing in…',connected:'Connected',disconnected:'Disconnected',error:'Connection error'}[state.connection.state]||state.connection.state)}
 async function loadStatus({render=true}={}){const x=await apiJson('/api/status');state.connection=x.whatsapp;state.sendEnabled=Boolean(x.send?.enabled);if(render)renderShell()}
 async function loadConfig(){const x=await apiJson('/api/config');state.sendEnabled=Boolean(x.sendEnabled);state.mirrorOnly=Boolean(x.mirrorOnly);state.followNewMessages=Boolean(x.followNewMessages);}
@@ -75,8 +96,10 @@ async function selectChat(id){
     state.unread.delete(id);
     renderChatList();
     renderConversationHeader();
+    focusComposer();
     return;
   }
+  rememberPosition();
   const token=++chatLoadToken;
   state.selectedChatId=id;state.unread.delete(id);state.view='chat';conversation.resetForChat();app.classList.add('open');
   const cached=state.messageCache.get(id);
@@ -87,17 +110,19 @@ async function selectChat(id){
   }
   renderShell();
   await conversation.renderMessages({loading:state.messageLoading});
-  if(cached?.messages?.length){conversation.scrollBottom({initial:true});focusComposer()}
+  if(cached?.messages?.length){const saved=chatPositions.get(id);if(saved&&!saved.bottom){state.scrollMode='idle';conversation.clearInitialTimer();conversation.restoreScrollAnchor(saved.anchor)}else conversation.scrollBottom({initial:true});focusComposer()}
   try{
     const data=await apiJson(`/api/chats/${encodeURIComponent(id)}/messages?limit=50`);
     if(token!==chatLoadToken||state.selectedChatId!==id)return;
-    state.messages=mergeKnownReactions(data,state.reactionStates);state.hasOlder=data.length>0;state.messageLoading=false;
-    state.messageCache.set(id,{messages:data,hasOlder:state.hasOlder,at:Date.now()});
+    const keep=chatPositions.get(id);
+    const merged=keep&&!keep.bottom&&cached?.messages?.length?[...new Map([...cached.messages,...data].map(m=>[m.id,m])).values()].sort((a,b)=>a.timestamp-b.timestamp||a.id.localeCompare(b.id)):data;
+    state.messages=mergeKnownReactions(merged,state.reactionStates);state.hasOlder=data.length>0;state.messageLoading=false;
+    state.messageCache.set(id,{messages:state.messages,hasOlder:state.hasOlder,at:Date.now()});
     // Keep the cache deliberately small and short-lived. It exists to make
     // back-and-forth chat switching instant, not to become a second database.
     for(const [chat,entry] of state.messageCache){if(Date.now()-entry.at>MESSAGE_CACHE_TTL)state.messageCache.delete(chat)}
     while(state.messageCache.size>8)state.messageCache.delete(state.messageCache.keys().next().value);
-    await conversation.renderMessages({loading:false});conversation.scrollBottom({initial:true});focusComposer();
+    await conversation.renderMessages({loading:false});const saved=chatPositions.get(id);if(saved&&!saved.bottom){state.scrollMode='idle';conversation.clearInitialTimer();conversation.restoreScrollAnchor(saved.anchor)}else conversation.scrollBottom({initial:true});focusComposer();
   }catch(err){
     if(token!==chatLoadToken||state.selectedChatId!==id)return;
     state.messageLoading=false;await conversation.renderMessages({loading:false});throw err;
@@ -113,7 +138,7 @@ async function openMessage(chatId,messageId,loaded=null){
     state.messages=mergeKnownReactions(data,state.reactionStates);state.hasOlder=true;state.messageLoading=false;
     await conversation.renderMessages({loading:false});
     await conversation.highlightMessage(messageId);
-    wireComposer();
+    wireComposer();focusComposer();
   }catch(err){
     if(token===chatLoadToken&&state.selectedChatId===chatId){state.messageLoading=false;await conversation.renderMessages({loading:false})}
     throw err;
@@ -205,35 +230,39 @@ async function syncReactions(){
 }
 async function refreshSelectedMessages(){if(!state.selectedChatId)return;const data=await apiJson(`/api/chats/${encodeURIComponent(state.selectedChatId)}/messages?limit=50`);state.messages=mergeKnownReactions(data,state.reactionStates);state.messageCache.set(state.selectedChatId,{messages:data,hasOlder:state.hasOlder,at:Date.now()});await conversation.renderMessages()}
 function renderShell(){
-  const connected=state.connection.state==='connected',hasError=state.connection.state==='error';
-  const initialSetup=connected&&state.connection.initialBootstrap===true;
+  const connected=state.connection.state==='connected',initialSetup=connected&&state.connection.initialBootstrap===true;
+  const paused=!connected||initialSetup;
+  const oldMessages=$('#messages');
+  if(paused&&oldMessages&&!oldMessages.hidden&&!suspendedAnchor){suspendedAnchor=conversation?.captureScrollAnchor();conversation?.clearInitialTimer()}
   app.classList.toggle('connection-mode',!connected);
   app.classList.toggle('initial-setup-mode',initialSetup);
+  render(html`
+    <div class="initial-setup" ?hidden=${!initialSetup} role="status" aria-live="polite"><div class="initial-setup-card"><span class="connection-spinner" aria-hidden="true"></span><h2>${state.connection.syncPhase==='checking_history'?'Finishing setup…':state.connection.syncPhase==='settling_history'?'Preparing chats…':'Importing messages…'}</h2><p>Preparing your chats, messages and contact information.</p></div></div>
+    <aside class="sidebar" ?hidden=${initialSetup}>
+      <div class="sidebar-top top"><h1><a class="wisp-brand" href="https://github.com/desirevolution/wisp" target="_blank" rel="noopener noreferrer" aria-label="Wisp project on GitHub (opens in a new tab)" title="Wisp on GitHub"><img src="/icons/icon.svg" alt="" width="32" height="32"><span>Wisp</span></a></h1><button class="icon-btn" id="settingsBtn" aria-label="Open settings" title="Settings">${icon('settings')}</button></div>
+      <div id="searchWrap" class="search" data-key="search" ?hidden=${paused}><input id="search" type="search" aria-label="Search chats and messages" placeholder="Search chats and messages" .value=${live(state.filter)} autocomplete="off" autocorrect="off" spellcheck="false"></div>
+      <wisp-chat-list id="chatList" class="chat-list" ?hidden=${paused}></wisp-chat-list>
+      <div class="connection-summary" ?hidden=${connected}><i class="dot"></i><span>${connectionLabel()}</span></div>
+      <div id="keyboardHint" class="keyboard-hint" aria-hidden="true" hidden>↑↓ Navigate · Enter Open</div>
+    </aside>
+    <div id="sidebarResize" class="sidebar-resize" role="separator" tabindex="0" aria-label="Chat list width" aria-orientation="vertical" title="Resize chat list (arrow keys)" ?hidden=${paused}></div>
+    <main class="conversation" ?hidden=${initialSetup}>
+      <div class="conversation-top top"><button class="back" id="back" aria-label="Back to chats" title="Back to chats" ?hidden=${paused||!state.selectedChatId}>${icon('back')}</button><h2 id="conversationTitle">Messages</h2><button class="icon-btn media-btn" id="mediaBtn" aria-label="Media, links and documents" title="Media, links and documents" ?hidden=${paused||!state.selectedChatId}>${icon('grid')}</button></div>
+      <wisp-message-list id="messages" class="messages" ?hidden=${paused||state.view!=='chat'}></wisp-message-list>
+      <wisp-gallery id="gallery" class="messages" ?hidden=${paused||state.view!=='gallery'}></wisp-gallery>
+      <button id="newMessages" class="new-messages" hidden></button>
+      <wisp-composer id="composer" ?hidden=${paused||!state.sendEnabled||state.mirrorOnly||!state.selectedChatId||state.view!=='chat'}></wisp-composer>
+      <wisp-connection id="connectionView" ?hidden=${connected}></wisp-connection>
+    </main>
+    <wisp-settings id="settings" ?hidden=${!state.settingsOpen}></wisp-settings>
+    <div id="appToast" role="status" aria-live="polite" hidden></div>
+  `,app);
+  wireShell();navigation?.updateActivePane();
+  syncConnection();syncSettings();if(paused&&$('#newMessages'))$('#newMessages').hidden=true;
+  if(connected&&!initialSetup){
+    renderChatList();renderConversationHeader();
+    if(state.view==='chat')void conversation.renderMessages().then(()=>{if(suspendedAnchor){state.scrollMode='idle';conversation.restoreScrollAnchor(suspendedAnchor);suspendedAnchor=null}});
 
-  if(initialSetup){
-    app.innerHTML=`<div class="initial-setup" role="status" aria-live="polite">
-      <div class="initial-setup-card">
-        <span class="connection-spinner" aria-hidden="true"></span>
-        <h2>${state.connection.syncPhase==='checking_history'?'Finishing setup…':state.connection.syncPhase==='settling_history'?'Preparing chats…':'Importing messages…'}</h2>
-        <p>${state.connection.syncPhase==='checking_history'?'Resolving names and checking imported history.':state.connection.syncPhase==='settling_history'?'Waiting for the initial WhatsApp import to settle.':'Importing your initial chats, messages and contact information.'}</p>
-      </div>
-    </div>${state.settingsOpen?'<wisp-settings id="settings"></wisp-settings>':''}`;
-    wireSettings();
-    return;
-  }
-
-  const sidebarBody=connected?`<div id="searchWrap" class="search" data-key="search"><input id="search" type="search" name="wa-mirror-filter" placeholder="Search chats and messages" value="${esc(state.filter)}" autocomplete="off" autocorrect="off" spellcheck="false"></div><wisp-chat-list id="chatList" class="chat-list"></wisp-chat-list><div id="keyboardHint" class="keyboard-hint" aria-hidden="true">↑↓ Navigate · Enter Open</div>`:`<div class="connection-summary"><i class="dot ${hasError?'bad':''}"></i><span>${esc(connectionLabel())}</span></div>`;
-  const mainBody=connected?`<wisp-message-list id="messages" class="messages"></wisp-message-list><button id="newMessages" class="new-messages" hidden></button><div id="incomingNotice" class="incoming-notice" hidden></div>${state.sendEnabled&&state.selectedChatId&&state.view==='chat'?`<wisp-composer id="composer"></wisp-composer>`:''}`:`<wisp-connection id="connectionView"></wisp-connection>`;
-  app.innerHTML=`<aside class="sidebar"><div class="sidebar-top top"><h1>Wisp</h1><button class="icon-btn" id="settingsBtn" aria-label="Open settings" title="Settings">⚙</button></div>${sidebarBody}</aside><main class="conversation"><div class="conversation-top top"><button class="back" id="back" aria-label="Back to chats">‹</button><h2 id="conversationTitle">Messages</h2><button class="icon-btn media-btn" id="mediaBtn" aria-label="Media, links and documents" title="Media, links & documents" ${connected&&state.selectedChatId?'':'hidden'}>▦</button></div>${mainBody}</main>${state.settingsOpen?'<wisp-settings id="settings"></wisp-settings>':''}`;
-  wireShell();
-  navigation?.updateActivePane();
-  if(connected){
-    renderChatList();
-    renderConversationHeader();
-    if(state.selectedChatId){
-      if(state.view==='chat'&&state.messages.length)void conversation.renderMessages();
-      else if(state.view==='gallery')void gallery.render({loading:true}).then(()=>gallery.refresh());
-    }
   }
 }
 function renderChatList(){navigation?.renderChatList()}
@@ -261,29 +290,32 @@ async function retryMedia(messageId){
   }
 }
 function focusComposer(){if(!state.sendEnabled||!state.selectedChatId||state.view!=='chat'||!window.matchMedia('(min-width: 701px)').matches||state.settingsOpen)return;state.activePane='right';state.keyboardNavActive=false;requestAnimationFrame(()=>{$('#composer')?.focusInput();navigation?.updateKeyboardModeIndicator();navigation?.updateActivePane()})}
-function wireComposer(){const composer=$('#composer');if(!composer)return;composer.chatId=state.selectedChatId;composer.requestUpdate();focusComposer()}
+function wireComposer(){const composer=$('#composer');if(!composer)return;composer.chatId=state.selectedChatId;composer.requestUpdate()}
 function syncConnection(){const el=$('#connectionView');if(el){el.status=state.connection;el.requestUpdate()}}
 function syncSettings(){const el=$('#settings');if(!el)return;el.status=state.connection;el.followNewMessages=state.followNewMessages;el.mirrorOnly=state.mirrorOnly;el.pushEnabled=state.pushEnabled;el.installAvailable=Boolean(state.installPrompt);el.standalone=state.isStandalone;el.requestUpdate()}
-function renderSettings(){const old=$('#settings');if(!state.settingsOpen){old?.remove();focusComposer();return}if(!old){const el=document.createElement('wisp-settings');el.id='settings';app.appendChild(el);wireSettings(el)}syncSettings()}
-function openSettings(){settingsReturnFocus=document.activeElement;state.settingsOpen=true;renderSettings();requestAnimationFrame(()=>$('#settings')?.querySelector('.modal-head .icon-btn')?.focus())}
+function renderSettings(){const el=$('#settings');if(!el)return;el.hidden=!state.settingsOpen;for(const node of app.querySelectorAll('.sidebar,.conversation,.sidebar-resize'))node.inert=state.settingsOpen;wireSettings(el);syncSettings()}
+function openSettings(){if(state.settingsOpen)return;settingsReturnFocus=document.activeElement;state.settingsOpen=true;renderSettings();requestAnimationFrame(()=>$('#settings')?.querySelector('.modal-head .icon-btn')?.focus())}
 function removeSettingsKeyHandler(){if(settingsKeyHandler){document.removeEventListener('keydown',settingsKeyHandler);settingsKeyHandler=null}}
-function closeSettings(){removeSettingsKeyHandler();state.settingsOpen=false;renderSettings();requestAnimationFrame(()=>{if(settingsReturnFocus?.isConnected)settingsReturnFocus.focus();else $('#settingsBtn')?.focus();settingsReturnFocus=null})}
+function closeSettings(){if(!state.settingsOpen)return;removeSettingsKeyHandler();state.settingsOpen=false;if($('#settings'))$('#settings').confirmUnlink=false;renderSettings();requestAnimationFrame(()=>{if(settingsReturnFocus?.isConnected)settingsReturnFocus.focus();else $('#settingsBtn')?.focus();settingsReturnFocus=null})}
 function reconnectWhatsApp(){state.connection={...state.connection,state:'reconnecting',qr:null,error:null};renderShell();fetch('/api/whatsapp/reconnect',{method:'POST'}).catch(()=>{state.connection={...state.connection,state:'error',error:'Reconnect request failed.'};renderShell()})}
-function wireShell(){conversation?.wireMessageList($('#messages'));navigation?.wireShell();$('#back')?.addEventListener('click',()=>app.classList.remove('open'));$('#settingsBtn')?.addEventListener('click',openSettings);$('#errorBanner')?.addEventListener('click',openSettings);$('#newMessages')?.addEventListener('click',()=>conversation.scrollBottom());$('#mediaBtn')?.addEventListener('click',()=>gallery.open('media'));const connection=$('#connectionView');if(connection){connection.status=state.connection;connection.addEventListener('connection-reconnect',reconnectWhatsApp)}const settings=$('#settings');if(settings){wireSettings(settings);syncSettings()}wireComposer()}
-function wireSettings(el=$('#settings')){if(!state.settingsOpen||!el||el.dataset.wired)return;el.dataset.wired='true';removeSettingsKeyHandler();settingsKeyHandler=e=>{if(e.key==='Escape'){e.preventDefault();closeSettings()}};document.addEventListener('keydown',settingsKeyHandler);el.addEventListener('settings-close',closeSettings);el.addEventListener('follow-change',e=>{saveConfig({followNewMessages:e.detail}).catch(()=>showToast('Could not save setting.'))});el.addEventListener('settings-reconnect',()=>{removeSettingsKeyHandler();state.settingsOpen=false;reconnectWhatsApp()});el.addEventListener('settings-unlink',async()=>{removeSettingsKeyHandler();state.settingsOpen=false;state.selectedChatId=null;state.connection={...state.connection,state:'disconnecting',qr:null,error:null};renderShell();try{const r=await fetch('/api/whatsapp/logout',{method:'POST'});if(!r.ok)throw new Error('Unlink failed')}catch{state.connection={...state.connection,state:'error',error:'Could not unlink WhatsApp.'};renderShell()}});el.addEventListener('push-toggle',()=>pwa.togglePush().catch(err=>showToast(err?.message||'Could not update push notifications.')));el.addEventListener('install-app',()=>pwa.installApp())}
-
-function showIncomingNotice(m){
-  const el=$('#incomingNotice');if(!el)return;
-  const c=state.chats.find(c=>c.id===m.chat_id),name=displayName(c?.name,m.chat_id,c?.type),preview=m.body||mediaLabel(m.type);
-  el.innerHTML=`<div><b>${esc(name)}</b><span>${esc(preview.slice(0,120))}</span></div><button>Show</button>`;
-  el.hidden=false;el.querySelector('button').onclick=()=>{el.hidden=true;selectChat(m.chat_id)};
-  clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{if(el)el.hidden=true},8000);
+function wireShell(){
+  conversation?.wireMessageList($('#messages'));navigation?.wireShell();
+  const once=(id,event,handler)=>{const el=$(id);if(el&&!el.dataset.shellWired){el.addEventListener(event,handler);el.dataset.shellWired='true'}};
+  once('#back','click',backToSelection);
+  once('#settingsBtn','click',openSettings);
+  once('#newMessages','click',()=>conversation.scrollBottom());
+  once('#mediaBtn','click',()=>gallery.open('media'));
+  once('#connectionView','connection-reconnect',reconnectWhatsApp);
+  const handle=$('#sidebarResize');if(handle&&!handle.dataset.wired){handle.dataset.wired='true';installSidebarResize(app,handle)}
+  wireSettings($('#settings'));wireComposer();
 }
+function installSettingsKeys(){removeSettingsKeyHandler();if(!state.settingsOpen)return;settingsKeyHandler=e=>{if(e.key==='Escape'){e.preventDefault();closeSettings()}};document.addEventListener('keydown',settingsKeyHandler)}
+function wireSettings(el=$('#settings')){if(!el)return;if(el.dataset.wired){if(state.settingsOpen)installSettingsKeys();return};el.dataset.wired='true';installSettingsKeys();el.addEventListener('settings-close',()=>closeSettings());el.addEventListener('follow-change',e=>{saveConfig({followNewMessages:e.detail}).catch(()=>showToast('Could not save setting.'))});el.addEventListener('settings-reconnect',()=>{closeSettings();reconnectWhatsApp()});el.addEventListener('settings-unlink',async()=>{closeSettings();state.selectedChatId=null;state.connection={...state.connection,state:'disconnecting',qr:null,error:null};renderShell();try{const r=await fetch('/api/whatsapp/logout',{method:'POST'});if(!r.ok)throw new Error('Unlink failed')}catch{state.connection={...state.connection,state:'error',error:'Could not unlink WhatsApp.'};renderShell()}});el.addEventListener('push-toggle',()=>pwa.togglePush().catch(err=>showToast(err?.message||'Could not update push notifications.')));el.addEventListener('install-app',()=>pwa.installApp())}
 
 async function handleLaunchTarget(){const q=new URLSearchParams(location.search),chat=q.get('chat'),message=q.get('message');if(!chat)return;history.replaceState(null,'',location.pathname);if(message)await openMessage(chat,message);else await selectChat(chat)}
 conversation=createConversation({app,store,apiJson,onRetryMedia:retryMedia,onReply:selectReply,onReaction:setReaction,onQuote:openQuote});
-gallery=createGallery({app,store,apiJson,openMessage});
-navigation=createNavigation({app,store,selectChat,openMessage,focusComposer});
+gallery=createGallery({app,store,apiJson,onViewChange:renderShell,openMessage});
+navigation=createNavigation({app,store,selectChat,openMessage,focusComposer,onError:message=>showToast(message)});
 navigation.installGlobalListeners();
 pwa=createPwaService({store,apiJson,onStateChange:()=>{if(state.settingsOpen)renderSettings()},onError:message=>showToast(message)});
 pwa.start();
@@ -295,7 +327,7 @@ bus.on('live:deletion',data=>updateDeletionView(data).catch(console.error));
 bus.on('live:reaction',data=>updateReactionView(data).catch(console.error));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')syncReactions().catch(()=>{})});
 bus.on('live:connection',next=>{state.connection=next;renderShell()});
-bus.on('live:message',async m=>{m=mergeKnownReactions([m],state.reactionStates)[0];const atBottom=conversation.isNearBottom(),c=state.chats.find(x=>x.id===m.chat_id);if(c){c.last_message_id=m.id;c.last_message_at=m.timestamp;c.last_body=m.body;c.last_type=m.type;c.last_from_me=m.from_me;c.last_sender_name=m.sender_name;state.chats.sort((a,b)=>(b.last_message_at||0)-(a.last_message_at||0));renderChatList();renderConversationHeader()}else{loadChats({render:false}).then(()=>{renderChatList();renderConversationHeader()}).catch(()=>{})}if(state.selectedChatId===m.chat_id){if(!state.messages.some(x=>x.id===m.id)){state.messages.push(m);state.messageCache.set(m.chat_id,{messages:[...state.messages],hasOlder:state.hasOlder,at:Date.now()});if(state.view==='chat'){await conversation.renderMessages();if(atBottom)conversation.scrollBottom();else{state.newWhileReading++;conversation.updateNewButton()}}if(earlyMediaEvents.delete(m.id)){refreshSelectedMessages().catch(()=>{})}}return}if(m.from_me)return;state.unread.set(m.chat_id,(state.unread.get(m.chat_id)||0)+1);renderChatList();if(state.mirrorOnly&&state.followNewMessages){selectChat(m.chat_id)}else{showIncomingNotice(m)}});
+bus.on('live:message',async m=>{m=mergeKnownReactions([m],state.reactionStates)[0];const atBottom=conversation.isNearBottom(),c=state.chats.find(x=>x.id===m.chat_id);if(c){c.last_message_id=m.id;c.last_message_at=m.timestamp;c.last_body=m.body;c.last_type=m.type;c.last_from_me=m.from_me;c.last_sender_name=m.sender_name;state.chats.sort((a,b)=>(b.last_message_at||0)-(a.last_message_at||0));renderChatList();renderConversationHeader()}else{loadChats({render:false}).then(()=>{renderChatList();renderConversationHeader()}).catch(()=>{})}if(state.selectedChatId===m.chat_id&&app.classList.contains('open')){if(!state.messages.some(x=>x.id===m.id)){state.messages.push(m);state.messageCache.set(m.chat_id,{messages:[...state.messages],hasOlder:state.hasOlder,at:Date.now()});if(state.view==='chat'){await conversation.renderMessages();if(atBottom)conversation.scrollBottom();else{state.newWhileReading++;conversation.updateNewButton()}}if(earlyMediaEvents.delete(m.id)){refreshSelectedMessages().catch(()=>{})}}return}if(m.from_me)return;state.unread.set(m.chat_id,(state.unread.get(m.chat_id)||0)+1);renderChatList();if(state.mirrorOnly&&state.followNewMessages){selectChat(m.chat_id)}});
 bus.on('live:media',async d=>{
   if(state.selectedChatId!==d.chatId)return;
   if(state.view==='gallery'){gallery.refresh();return}
@@ -346,4 +378,5 @@ async function init(){
 }
 app.addEventListener('viewport-layout', () => conversation?.updateNewButton());
 await init();
+app.addEventListener('composer-resize',()=>conversation.updateNewButton());
 }

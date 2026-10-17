@@ -1,0 +1,43 @@
+# UI/UX refresh — unreleased
+
+Follow-up: soften element focus to a one-pixel muted blue-grey outline; retain keyboard visibility. Mobile message actions now open a bottom sheet with message preview, direct emoji selection and a large Reply action.
+
+- Render the application shell through stable Lit templates; retain composer identity on connection updates and keep gallery/conversation nodes separate.
+- Group consecutive messages from the same sender within five minutes. Retain every timestamp and all reply/reaction/edit/deletion information.
+- Replace character-based action symbols with local outline SVG icons. Improve secondary text contrast and keyboard focus visibility while retaining the dark green appearance and full-width conversation.
+- Show desktop reply/reaction actions on hover or focus. On mobile use one adjacent action-menu button with a viewport-constrained bottom sheet, preview and direct emoji reactions.
+- Add per-device sidebar resizing by dragging or separator arrow keys (Shift for larger steps, Home/End for limits).
+- Persist text/reply drafts per chat in this browser. Attachments remain temporary; sending failures preserve the full in-memory draft for manual retry.
+- Grow the composer to five lines. Mobile Enter adds a newline; desktop Enter sends and Shift+Enter adds a newline. Ignore composition Enter.
+- Simplify in-app Back to always return to the chat selection; remove internal browser history and overlay history entries. Suppress stale search responses.
+- Preserve reading anchors when switching back to cached chats or recovering the WhatsApp connection. Keep the connection screen during interruption.
+- Remove in-app previews for messages in other chats. Keep unread badges and the existing dedicated mirror-follow option.
+
+- Align the pre-existing service-worker/README version mismatch with package/backend 1.0.0.
+
+Read-state synchronization, first-unread opening and advanced search/media filters are deferred. Backend APIs, deployment settings and the WhatsApp transport are unchanged. See [UI specification](ui-ux-spec.md) for decisions and acceptance criteria.
+
+Executed checks and remaining manual checks: [validation record](ui-ux-validation.md).
+
+## Demo screenshot runner
+
+Add `npm run screenshots` and `scripts/demo-screenshots.sh`: build the frontend,
+serve fictional English chats through a loopback-only mock API, validate both
+viewports and write the two README screenshots. No real WhatsApp/server data is used.
+
+Add `Dockerfile.screenshots`, `compose.screenshots.yml` and
+`scripts/demo-screenshots-docker.sh` to generate the same demo screenshots with
+container-provided Node/Chromium/fonts. The runtime has no external network,
+reads the built source and writes only temporary browser data and host screenshots.
+
+## Simplified navigation and desktop reaction popovers
+
+Remove desktop Close icons from the reaction picker and reaction overview;
+outside click/Escape still dismiss them and return focus. Mobile sheets keep Close.
+In-app Back now returns directly to the chat selection from chat, search results
+and gallery. Browser/Android Back is no longer intercepted. Remove the UI-history
+service and its snapshots/overlay events. Drafts and cached reading positions remain.
+
+Add the existing Wisp icon beside the name in the chat-list header. The brand
+links to the GitHub project in a new tab, with accessible labeling and safe
+external-link attributes.

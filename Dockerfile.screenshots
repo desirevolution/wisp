@@ -1,0 +1,19 @@
+# Match the project's Node version and the Playwright version in package-lock.json.
+FROM node:24-bookworm-slim AS node
+FROM mcr.microsoft.com/playwright:v1.62.1-noble
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    XDG_CACHE_HOME=/tmp/wisp-screenshot-cache \
+    XDG_CONFIG_HOME=/tmp/wisp-screenshot-config
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend ./frontend
+COPY internal/model/emojis.json ./internal/model/emojis.json
+COPY tests/demo-screenshots.mjs ./tests/demo-screenshots.mjs
+COPY tests/fixtures/demo-data.mjs ./tests/fixtures/demo-data.mjs
+RUN npm run build
+# Runtime only reads the build and writes captures to the mounted output folder.
+CMD ["node", "tests/demo-screenshots.mjs", "--output-dir", "/screenshots"]
