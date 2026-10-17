@@ -19,8 +19,8 @@ proxy; Wisp has no built-in login or user permissions.
 ## Screenshots
 
 <p align="center">
-  <a href="screenshots/wisp-desktop.png?v=1" target="_blank">
-    <img src="screenshots/wisp-desktop.png?v=1" width="1200" alt="Desktop">
+  <a href="screenshots/wisp-desktop.png?v=2" target="_blank">
+    <img src="screenshots/wisp-desktop.png?v=2" width="1200" alt="Desktop">
   </a>
   <br>
   <sub><b>Desktop</b></sub>
@@ -29,8 +29,8 @@ proxy; Wisp has no built-in login or user permissions.
 <br>
 
 <p align="center">
-  <a href="screenshots/wisp-mobile.png?v=1" target="_blank">
-    <img src="screenshots/wisp-mobile.png?v=1" width="400" alt="Mobile">
+  <a href="screenshots/wisp-mobile.png?v=2" target="_blank">
+    <img src="screenshots/wisp-mobile.png?v=2" width="400" alt="Mobile">
   </a>
   <br>
   <sub><b>Mobile</b></sub>
