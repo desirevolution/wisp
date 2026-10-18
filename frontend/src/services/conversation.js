@@ -238,7 +238,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
   function updateNewButton() {
     const button = $('#newMessages');
     if (!button) return;
-    button.hidden = state.chatPreparing || !state.selectedChatId || state.view !== 'chat' || isNearBottom();
+    button.hidden = Boolean(state.imageViewer) || state.chatPreparing || !state.selectedChatId || state.view !== 'chat' || isNearBottom();
     button.setAttribute('aria-label','Scroll to latest message');
     button.title = 'Scroll to latest message';
     button.style.bottom = `${($('#composer')?.offsetHeight || 0) + 20}px`;

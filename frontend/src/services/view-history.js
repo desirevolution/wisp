@@ -6,13 +6,20 @@ export function createViewHistory({ win = window, onChange }) {
   const valid=s=>s?.wispView===marker&&['overview','chat','image'].includes(s.view);
   const current=()=>valid(win.history.state)?win.history.state:overview();
   if(!valid(win.history.state))win.history.replaceState(overview(),'');
-  const pop=()=>onChange(current());
+  let pendingChat=null;
+  const pop=()=>{
+    if(pendingChat!==null){win.history.replaceState({wispView:marker,view:'chat',chatId:pendingChat},'');pendingChat=null}
+    onChange(current());
+  };
   win.addEventListener('popstate',pop);
   return {
     current,
-    openChat(chatId){
+    openChat(chatId,{preserveImage=false}={}){
       const previous=current();
-      if(previous.view==='image'&&previous.chatId===chatId)return;
+      if(previous.view==='image'){
+        if(preserveImage&&previous.chatId===chatId)return;
+        pendingChat=chatId;win.history.back();return;
+      }
       const next={wispView:marker,view:'chat',chatId};
       if(previous.view==='overview')win.history.pushState(next,'');
       else win.history.replaceState(next,'');

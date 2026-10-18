@@ -221,7 +221,8 @@ between chats replaces that entry: Browser/Android Back returns to the overview,
 and Back again uses normal browser/PWA navigation to leave Wisp. The in-app Back
 button also returns to the overview. Browser Forward restores the selected chat.
 
-Chat images and stickers open in Wisp's image viewer, including in the installed
-PWA. Use Back to chat, Close, Escape or Browser Back to return to the same chat;
+Chat images and stickers open inside the right-hand chat pane, including in the
+installed PWA. The desktop chat list remains available. Use the normal header
+Back button, Escape or Browser Back to return to the same chat;
 images no longer navigate the PWA to a raw media endpoint or open a separate tab.
-The viewer and selected chat can also be restored after a reload.
+The image page and selected chat can also be restored after a reload.

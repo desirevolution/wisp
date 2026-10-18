@@ -216,7 +216,7 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
     });
     document.addEventListener('pointerdown', event => {
       if (!desktop() || state.settingsOpen || state.connection.state !== 'connected') return;
-      if (event.target.closest('button,input,textarea,a,[contenteditable="true"],.chat,.search-hit,.bubble,.media-tile,.link-card,.modal')) return;
+      if (event.target.closest('button,input,textarea,a,[contenteditable="true"],.chat,.search-hit,.bubble,.media-tile,.link-card,.modal,.image-viewer')) return;
       if (event.target.closest('.sidebar')) activateChatPane();
       else if (event.target.closest('.conversation')) activateConversationPane();
     });

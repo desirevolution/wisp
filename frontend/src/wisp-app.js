@@ -71,6 +71,7 @@ function rememberPosition(){
   if(!state.chatPreparing&&state.selectedChatId&&state.view==='chat')chatPositions.set(state.selectedChatId,{anchor:conversation?.captureScrollAnchor(),bottom:conversation?.isNearBottom()});
 }
 function backToSelection(fromHistory=false){
+  if(!fromHistory&&state.imageViewer){closeImageViewer();return}
   if(!fromHistory&&viewHistory?.toOverview())return;
   dismissImageViewer();imageScrollIntent=null;
   const previous=state.selectedChatId;
@@ -128,7 +129,7 @@ async function failChatPreparation(token,error){
   state.messageLoading=false;state.chatLoadError=error.message||'Could not load messages.';
   renderShell({refreshMessages:false});
 }
-async function selectChat(id){if(state.imageViewer)dismissImageViewer();viewHistory?.openChat(id);imageScrollIntent=null;
+async function selectChat(id,{restore=false}={}){if(state.imageViewer)dismissImageViewer();viewHistory?.openChat(id,{preserveImage:restore});imageScrollIntent=null;
   if(id===state.selectedChatId&&state.view==='chat'){
     if(state.chatPreparing&&!state.chatLoadError)return;
     if(!state.chatPreparing){app.classList.add('open');state.unread.delete(id);renderChatList();renderConversationHeader();focusComposer();return}
@@ -291,20 +292,19 @@ function renderShell({refreshMessages=true}={}){
       <div id="keyboardHint" class="keyboard-hint" aria-hidden="true" hidden>↑↓ Navigate · Enter Open</div>
     </aside>
     <div id="sidebarResize" class="sidebar-resize" role="separator" tabindex="0" aria-label="Chat list width" aria-orientation="vertical" title="Resize chat list (arrow keys)" ?hidden=${paused}></div>
-    <main class="conversation" ?hidden=${initialSetup}>
-      <div class="conversation-top top"><button class="back" id="back" aria-label="Back to chats" title="Back to chats" ?hidden=${paused||!state.selectedChatId}>${icon('back')}</button><h2 id="conversationTitle">Messages</h2><button class="icon-btn media-btn" id="mediaBtn" aria-label="Media, links and documents" title="Media, links and documents" ?disabled=${state.chatPreparing} ?hidden=${paused||!state.selectedChatId}>${icon('grid')}</button></div>
-      <wisp-message-list id="messages" class="messages" .inert=${state.chatPreparing} aria-busy=${state.chatPreparing?'true':'false'} ?hidden=${paused||state.view!=='chat'}></wisp-message-list>
+    <main class=${state.imageViewer?'conversation image-open':'conversation'} ?hidden=${initialSetup}>
+      <div class="conversation-top top"><button class="back" id="back" aria-label=${state.imageViewer?'Back to chat':'Back to chats'} title=${state.imageViewer?'Back to chat':'Back to chats'} ?hidden=${paused||!state.selectedChatId}>${icon('back')}</button><h2 id="conversationTitle">Messages</h2><button class="icon-btn media-btn" id="mediaBtn" aria-label="Media, links and documents" title="Media, links and documents" ?disabled=${state.chatPreparing} ?hidden=${paused||!state.selectedChatId}>${icon('grid')}</button></div>
+      <wisp-message-list id="messages" class="messages" .inert=${state.chatPreparing||Boolean(state.imageViewer)} aria-busy=${state.chatPreparing?'true':'false'} ?hidden=${paused||state.view!=='chat'}></wisp-message-list>
       <div id="chatLoading" class="chat-loading" role="status" aria-live="polite" ?hidden=${!state.chatPreparing||paused||state.view!=='chat'}>${state.chatLoadError?html`<div><b>Could not load messages</b><p>${state.chatLoadError}</p><button @click=${()=>selectChat(state.selectedChatId)}>Try again</button></div>`:html`<span>Loading messages…</span>`}</div>
       <wisp-gallery id="gallery" class="messages" ?hidden=${paused||state.view!=='gallery'}></wisp-gallery>
       <button id="newMessages" class="new-messages" hidden></button>
-      <wisp-composer id="composer" .inert=${state.chatPreparing} ?hidden=${paused||!state.sendEnabled||state.mirrorOnly||!state.selectedChatId||state.view!=='chat'}></wisp-composer>
+      <wisp-composer id="composer" .inert=${state.chatPreparing||Boolean(state.imageViewer)} ?hidden=${paused||!state.sendEnabled||state.mirrorOnly||!state.selectedChatId||state.view!=='chat'}></wisp-composer>
+      <section id="imageViewer" class="image-viewer" role="region" aria-label="Image viewer" ?hidden=${paused||!state.imageViewer}>
+        ${state.imageViewer?html`<div class="image-viewer-stage"><img src=${state.imageViewer.src} alt=${state.imageViewer.alt||'Image'}></div><p>${state.imageViewer.alt||''}</p>`:null}
+      </section>
       <wisp-connection id="connectionView" ?hidden=${connected}></wisp-connection>
     </main>
     <div id="updateNotice" class="update-notice" role="status" ?hidden=${!state.update?.available}>Update ${state.update?.latest} available <a href=${state.update?.url||'https://github.com/desirevolution/wisp/releases'} target="_blank" rel="noopener noreferrer">View release</a></div>
-    <dialog id="imageViewer" class="image-viewer" aria-label="Image viewer" @cancel=${e=>{e.preventDefault();closeImageViewer()}} @click=${e=>{if(e.target===e.currentTarget)closeImageViewer()}}>
-      <div class="image-viewer-head"><button type="button" aria-label="Back to chat" @click=${closeImageViewer}>${icon('back')} Back to chat</button><button type="button" aria-label="Close image" @click=${closeImageViewer}>${icon('close')}</button></div>
-      ${state.imageViewer?html`<img src=${state.imageViewer.src} alt=${state.imageViewer.alt||'Image'}><p>${state.imageViewer.alt||''}</p>`:null}
-    </dialog>
     <wisp-settings id="settings" ?hidden=${!state.settingsOpen}></wisp-settings>
     <div id="appToast" role="status" aria-live="polite" hidden></div>
   `,app);
@@ -317,7 +317,7 @@ function renderShell({refreshMessages=true}={}){
   }
 }
 function renderChatList(){navigation?.renderChatList()}
-function renderConversationHeader(){const title=$('#conversationTitle'),btn=$('#mediaBtn');if(!title)return;const c=state.chats.find(c=>c.id===state.selectedChatId);title.textContent=c?displayName(c.name,c.id,c.type):'Messages';if(btn)btn.hidden=!state.selectedChatId}
+function renderConversationHeader(){const title=$('#conversationTitle'),btn=$('#mediaBtn');if(!title)return;const c=state.chats.find(c=>c.id===state.selectedChatId);title.textContent=(c?displayName(c.name,c.id,c.type):'Messages')+(state.imageViewer?' · Image':'');if(btn)btn.hidden=!state.selectedChatId||Boolean(state.imageViewer)}
 async function retryMedia(messageId){
   const el=$('#messages');
   const button=[...el?.querySelectorAll('.retry-media')||[]].find(b=>b.closest('[data-message-id]')?.dataset.messageId===messageId);
@@ -362,8 +362,8 @@ async function followSentImage({chatId,messageId}){
   if(state.messages.some(m=>m.id===messageId)&&imageScrollIntent===intent)imageScrollIntent=null;
 }
 function dismissImageViewer(){
-  const dialog=$('#imageViewer');if(dialog?.open)dialog.close();
-  state.imageViewer=null;
+  const wasOpen=Boolean(state.imageViewer);state.imageViewer=null;
+  if(wasOpen)renderShell({refreshMessages:false});
   if(imageReturnFocus?.isConnected)imageReturnFocus.focus({preventScroll:true});
   imageReturnFocus=null;
 }
@@ -374,7 +374,7 @@ function openImageViewer(image,{history=true}={}){
   $('#messages')?.closePanel(false);
   if(history)viewHistory.openImage(image,state.selectedChatId);
   state.imageViewer=image;renderShell({refreshMessages:false});
-  const dialog=$('#imageViewer');if(dialog&&!dialog.open)dialog.showModal();
+  $('#back')?.focus({preventScroll:true});
 }
 function focusComposer(){if(state.chatPreparing||!state.sendEnabled||!state.selectedChatId||state.view!=='chat'||!window.matchMedia('(min-width: 701px)').matches||state.settingsOpen)return;state.activePane='right';state.keyboardNavActive=false;requestAnimationFrame(()=>{$('#composer')?.focusInput();navigation?.updateKeyboardModeIndicator();navigation?.updateActivePane()})}
 function wireComposer(){const composer=$('#composer');if(!composer)return;composer.chatId=state.selectedChatId;composer.blocked=state.chatPreparing;composer.requestUpdate()}
@@ -405,7 +405,7 @@ async function handleLaunchTarget(){
   const q=new URLSearchParams(location.search),chat=q.get('chat'),message=q.get('message');
   if(chat){history.replaceState(history.state,'',location.pathname);if(message)await openMessage(chat,message);else await selectChat(chat);return}
   const saved=viewHistory.current();
-  if(saved.chatId){await selectChat(saved.chatId);if(saved.view==='image'&&saved.image)openImageViewer(saved.image,{history:false})}
+  if(saved.chatId){await selectChat(saved.chatId,{restore:true});if(saved.view==='image'&&saved.image)openImageViewer(saved.image,{history:false})}
 }
 conversation=createConversation({app,store,apiJson,onRetryMedia:retryMedia,onReply:selectReply,onReaction:setReaction,onQuote:openQuote});
 gallery=createGallery({app,store,apiJson,onViewChange:renderShell,openMessage});
@@ -413,7 +413,7 @@ navigation=createNavigation({app,store,selectChat,openMessage,focusComposer,onEr
 viewHistory=createViewHistory({onChange:async target=>{
   if(target.view==='overview'){backToSelection(true);return}
   dismissImageViewer();
-  if(state.selectedChatId!==target.chatId)await selectChat(target.chatId);
+  if(state.selectedChatId!==target.chatId)await selectChat(target.chatId,{restore:true});
   if(viewHistory.current().chatId!==target.chatId||viewHistory.current().view!==target.view)return;
   if(target.view==='image'&&target.image)openImageViewer(target.image,{history:false});
 }});
@@ -478,6 +478,7 @@ async function init(){
     renderShell();
   }
 }
+app.addEventListener('keydown',event=>{if(state.imageViewer&&!state.settingsOpen&&event.key==='Escape'){event.preventDefault();event.stopPropagation();closeImageViewer()}});
 app.addEventListener('viewport-layout', () => conversation?.updateNewButton());
 await init();
 app.addEventListener('composer-resize',()=>conversation.updateNewButton());

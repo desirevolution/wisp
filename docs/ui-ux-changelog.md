@@ -135,3 +135,12 @@ Use platform-independent URL path cleanup for embedded assets. Windows filesyste
 cleanup introduced backslashes and failed embedded-FS lookup; the old SPA fallback
 to `/index.html` could then produce a `./` redirect loop. Serve fallback requests
 through the root on a cloned request instead.
+
+## Image page in the chat pane
+
+Replace the modal image viewer with an image page inside the right chat pane.
+Reuse the normal header Back button; Browser Back/Escape also return to the chat.
+Keep the desktop sidebar available and the underlying message layout/reading
+position intact. Switching chats while viewing an image collapses that image
+history layer so the next Back returns to the overview. This supersedes the
+modal presentation from the previous follow-up.

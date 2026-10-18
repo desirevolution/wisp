@@ -85,5 +85,7 @@ Settings show the embedded version, last release-check time and an available
 stable update link. A small in-app update notice links to the same release.
 Live update events refresh the notice without reloading the conversation.
 
-Chat images/stickers use a native modal image viewer inside Wisp with an explicit
-Back to chat control. Retain the underlying chat DOM and reading position.
+Chat images/stickers fill the right-hand chat content pane, using the existing
+header Back button to return to the chat. The desktop sidebar remains interactive.
+Retain the underlying chat DOM/layout and reading position. Browser Back and
+Escape return to chat; switching chats removes the image history layer.

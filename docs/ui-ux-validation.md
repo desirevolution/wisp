@@ -206,3 +206,16 @@ Based on the new uploaded `wisp-main(8).zip`.
 - Existing upload follow, update/version, media-frame, reply/reaction and
   position-preservation browser checks continue to pass.
 - The HTTP API race suite also passes (`go test -race ./internal/httpapi`).
+
+## Image page in the right chat pane
+
+- 31 unit tests, all four DOM suites, production build, source-version check and
+  the complete desktop/mobile Chromium suite pass. No backend changes.
+- Image viewing uses a section inside the right conversation grid; no open
+  dialog remains. Bounds checks confirm the desktop sidebar is separate and
+  interactive. The existing header Back button returns to the chat.
+- Browser Back/Forward, image-page reload and Escape continue to pass. Returning
+  preserves the underlying chat scroll position. Switching chats from the image
+  page collapses the image history layer, so the next Back goes to the overview
+  and a further Back reaches the previous external page.
+- Physical Android installed-PWA behavior remains a device smoke test.
