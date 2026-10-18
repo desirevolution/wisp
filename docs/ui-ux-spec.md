@@ -89,3 +89,7 @@ Chat images/stickers fill the right-hand chat content pane, using the existing
 header Back button to return to the chat. The desktop sidebar remains interactive.
 Retain the underlying chat DOM/layout and reading position. Browser Back and
 Escape return to chat; switching chats removes the image history layer.
+
+The image page and conversation header use the entire available right-pane width
+for portrait, landscape and square images. Retained chat surfaces must not create
+an implicit extra grid column or an image-size-dependent gap.

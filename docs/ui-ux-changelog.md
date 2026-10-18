@@ -144,3 +144,10 @@ Keep the desktop sidebar available and the underlying message layout/reading
 position intact. Switching chats while viewing an image collapses that image
 history layer so the next Back returns to the overview. This supersedes the
 modal presentation from the previous follow-up.
+
+## Full-width image page
+
+Prevent implicit grid columns in the conversation when the image page overlaps
+the retained composer/message layout. Set one explicit content column and place
+all conversation surfaces in it. The header and image page now fill the right
+pane independently of the image's intrinsic dimensions.

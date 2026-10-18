@@ -287,12 +287,30 @@ try{
  // Desktop keeps the chat list active while the image fills the right pane.
  await navImage.click();await np.locator('#imageViewer:not([hidden])').waitFor();
  await np.setViewportSize({width:1200,height:844});
- const viewerBounds=await np.locator('#imageViewer').boundingBox(),sidebarBounds=await np.locator('.sidebar').boundingBox();
+ await np.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+ const {viewer:viewerBounds,sidebar:sidebarBounds,pane:paneBounds,head:headerBounds}=await np.evaluate(()=>{const rect=s=>document.querySelector(s).getBoundingClientRect().toJSON();return {viewer:rect('#imageViewer'),sidebar:rect('.sidebar'),pane:rect('.conversation'),head:rect('.conversation-top')}});
+ assert.ok(Math.abs(viewerBounds.width-paneBounds.width)<2,'Image page must fill the entire conversation width');
+ assert.ok(Math.abs(headerBounds.width-paneBounds.width)<2,'Header must not shrink to the image width');
  assert.ok(viewerBounds.x>=sidebarBounds.x+sidebarBounds.width,JSON.stringify({viewerBounds,sidebarBounds}));
  assert.equal(await np.locator('#imageViewer').evaluate(el=>el.tagName),'SECTION');
  assert.equal(await np.locator('dialog[open]').count(),0);
  assert.equal(await np.locator('.sidebar').evaluate(el=>el.inert),false);
  assert.equal(await np.getByRole('button',{name:'Back to chat',exact:true}).evaluate(el=>Boolean(el.closest('.conversation-top'))),true);
+ for(const [width,height] of [[200,800],[1600,400],[600,600]]){
+   await np.locator('#messages').evaluate((el,{width,height})=>{
+     const src='data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#238b88"/></svg>`);
+     el.dispatchEvent(new CustomEvent('image-open',{detail:{src,alt:`Image ${width}x${height}`},bubbles:true}));
+   },{width,height});
+   await np.waitForFunction(()=>document.querySelector('#imageViewer img')?.complete);
+   for(const viewportWidth of [390,1200]){
+     await np.setViewportSize({width:viewportWidth,height:844});
+     await np.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+     const {pane,head,viewer}=await np.evaluate(()=>{const rect=s=>document.querySelector(s).getBoundingClientRect().toJSON();return {pane:rect('.conversation'),head:rect('.conversation-top'),viewer:rect('#imageViewer')}});
+     assert.ok(Math.abs(head.width-pane.width)<2&&Math.abs(viewer.width-pane.width)<2,JSON.stringify({width,height,viewportWidth,pane,head,viewer}));
+   }
+ }
+ if(process.env.WISP_IMAGE_PAGE_SCREENSHOT)await np.screenshot({path:process.env.WISP_IMAGE_PAGE_SCREENSHOT});
+
  await np.locator(`[data-id="${other}"]`).click();await np.locator('[data-message-id="h1"]').waitFor();
  await np.waitForFunction(other=>history.state.view==='chat'&&history.state.chatId===other,other);
  await np.setViewportSize({width:390,height:844});
