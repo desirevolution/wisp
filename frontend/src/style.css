@@ -466,3 +466,42 @@ dialog.chat-controls::backdrop{background:#0009}
 #headerMuted{margin-left:0}
 .chat-muted[hidden]{display:none}
 @media(max-width:700px){dialog.chat-controls{max-height:calc(var(--app-viewport-height,100dvh) - 24px)}.chat-controls-body{max-height:calc(var(--app-viewport-height,100dvh) - 100px)}}
+
+
+/* Keep mute indicators beside the name, including truncated mobile titles. */
+.conversation-heading{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.conversation-heading h2{flex:0 1 auto;min-width:0;margin:0}
+.chat-name{display:flex;align-items:center}
+.chat-name-text{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-name>.unread-dot{flex:none}
+
+/* Chat actions use the same bottom-sheet placement as mobile message actions. */
+@media(max-width:700px){
+ dialog.chat-controls[open]:not([data-mode="new"]){display:flex;flex-direction:column;position:fixed;inset:auto 0 auto;top:calc(var(--app-viewport-top,0px) + var(--app-viewport-height,100dvh));transform:translateY(-100%);width:100%;max-width:none;max-height:min(82dvh,calc(var(--app-viewport-height,100dvh) - 16px));margin:0;border-radius:18px 18px 0 0;border-bottom:0;box-shadow:0 -8px 32px #0005}
+ .chat-controls:not([data-mode="new"])::before{content:"";display:block;flex:none;width:32px;height:4px;margin:9px auto 0;border-radius:4px;background:#607782}
+ .chat-controls:not([data-mode="new"]) header{flex:none}
+ .chat-controls:not([data-mode="new"]) .chat-controls-body{flex:1;min-height:0;max-height:none;padding-bottom:max(16px,env(safe-area-inset-bottom))}
+ .chat-menu-actions>button{min-height:48px}
+}
+
+
+/* New-chat selection replaces the left list; on mobile it is a full page. */
+.chat-picker{display:block;grid-column:1;grid-row:1/-1;min-height:0;min-width:0;height:100%;background:#111b21}
+.chat-picker[hidden]{display:none!important}
+.chat-picker-view{display:grid;grid-template-rows:60px auto minmax(0,1fr);height:100%;min-height:0}
+.chat-picker-top{min-width:0;border-bottom:1px solid #2a3942}
+.chat-picker-top h2{margin:0;font-size:18px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-picker-search{padding:12px;border-bottom:1px solid #202c33}
+.chat-picker-search .chat-options-search{margin:0}
+.chat-picker-results{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:6px}
+.chat-picker .chat-options{max-height:none;overflow:visible}
+.chat-picker .chat-option{padding:12px 10px}
+.chat-picker .picker-error{margin:8px;padding:12px;border:1px solid #7b3c3c;border-radius:8px;background:#3b2225;color:#ffd9d9;line-height:1.5}
+.picker-error p{margin:0 0 10px}
+.picker-error button{min-height:44px;padding:8px 12px;border:1px solid #657b88;border-radius:6px;background:#24343c;color:#e9edef;cursor:pointer}
+.chat-picker button:disabled{opacity:.6;cursor:wait}
+@media(max-width:700px){
+ .app.picker-open .sidebar{display:grid!important;height:100%}
+ .app.picker-open .conversation{display:none!important}
+ .chat-picker-search .chat-options-search{font-size:16px}
+}

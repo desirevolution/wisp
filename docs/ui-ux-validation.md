@@ -235,3 +235,17 @@ Store/API/WhatsApp tests cover state persistence, concurrent close revisions,
 history/reaction imports, valid mute durations, contact validation and preserving
 UI events. Push and MQTT tests verify both current mute and a queued message's
 captured mute decision. Draft unit tests cover revision tombstones across reloads.
+
+
+Chat-control browser checks also assert that typing keeps the results container
+mounted and makes no extra contact requests, including an empty-result query and
+clearing the search. Mobile geometry checks place the mute icon beside both the
+header title and list name, and verify bottom alignment for menu, mute-duration
+selection and close confirmation, including a reduced visible viewport.
+
+
+The new-chat picker is a nonmodal sidebar on desktop and a full-page sidebar view
+on mobile. Browser coverage checks that the current desktop chat remains usable,
+responsive resizing keeps the current search, and there is no open dialog.
+It also checks mobile Back/Forward/reload restoration, keyboard arrows/Enter,
+Escape cancellation, and a single chat history entry after selecting a result.

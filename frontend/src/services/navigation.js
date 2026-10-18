@@ -175,7 +175,7 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
     if (globalListenersInstalled) return;
     globalListenersInstalled = true;
     document.addEventListener('keydown', event => {
-      if (document.querySelector('dialog[open]') || event.defaultPrevented || event.target.closest?.('.image-viewer,.message-actions,.message-popover,.reaction-chips,.quoted-message,wisp-emoji-picker') || !desktop() || state.settingsOpen || state.connection.state !== 'connected') return;
+      if (state.chatPickerOpen || document.querySelector('dialog[open]') || event.defaultPrevented || event.target.closest?.('.image-viewer,.message-actions,.message-popover,.reaction-chips,.quoted-message,wisp-emoji-picker') || !desktop() || state.settingsOpen || state.connection.state !== 'connected') return;
       const active = document.activeElement;
       const isComposer = active?.id === 'composerInput';
       const isSearch = active?.id === 'search';
@@ -216,7 +216,7 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
       }
     });
     document.addEventListener('pointerdown', event => {
-      if (!desktop() || state.settingsOpen || state.connection.state !== 'connected') return;
+      if (state.chatPickerOpen || !desktop() || state.settingsOpen || state.connection.state !== 'connected') return;
       if (event.target.closest('button,input,textarea,a,[contenteditable="true"],.chat,.search-hit,.bubble,.media-tile,.link-card,.modal,.chat-controls,.image-viewer')) return;
       if (event.target.closest('.sidebar')) activateChatPane();
       else if (event.target.closest('.conversation')) activateConversationPane();

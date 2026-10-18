@@ -15,6 +15,7 @@ export function createViewHistory({ win = window, onChange }) {
   return {
     current,
     openOverlay(mode){if(!current().overlay)win.history.pushState({...current(),overlay:mode},'')},
+    replaceOverlay(mode){win.history.replaceState({...current(),overlay:mode},'')},
     closeOverlay(){if(current().overlay){win.history.back();return true}return false},
     openChat(chatId,{preserveImage=false}={}){
       const previous=current();
