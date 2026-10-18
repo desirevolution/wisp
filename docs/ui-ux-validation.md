@@ -129,3 +129,34 @@ foreign-key failure; the corrected fixture inserts all four messages/contexts an
 passes `PRAGMA foreign_key_check`. Go remains unavailable here; rerun
 `go test ./internal/whatsapp -run TestStoredMediaDimensionsWorkBeforeDownloadWithoutSchemaChange`
 and `go test ./...` in CI. No production schema or runtime change was necessary.
+
+## Camera upload size and send feedback
+
+- 31 unit tests, all four DOM suites, frontend production build and the complete
+  desktop/mobile Chromium suite pass.
+- Real-browser camera-file regression: a generated 3200x2400 JPEG (458706 bytes)
+  becomes 2048x1536 (36921 bytes) before preview/upload. This synthetic gradient
+  demonstrates the path, not a promised compression ratio for real photographs.
+- A deliberately held image POST shows Sending image and the WhatsApp
+  confirmation status with Send disabled; success clears the image/caption.
+- Existing upload failure, caption/reply preservation, file/paste, chat-switch
+  during send and duplicate-send protection checks continue to pass.
+- No backend/schema change. Real mobile capture quality, preparation time and
+  end-to-end latency require device verification; no live network timing was
+  measured, and provider acknowledgement can still take time.
+
+## Resolve unknown media frames and proportional camera preview
+
+- 31 unit tests, all four DOM suites, production build and full desktop/mobile
+  Chromium suite pass.
+- Mobile camera preview follows the actual 4:3 image ratio within its bounds.
+- A delayed portrait without metadata first uses the fallback, then resolves to
+  its decoded 1:4 ratio within the same visit. Bottom/tail position is preserved.
+- An image resolving above an older reading position keeps the first visible
+  message at the same offset (under 2 px tolerance), with real browser scroll
+  anchoring active.
+- Pending/failed/ready transitions retain the resolved frame; a later visit uses
+  learned dimensions immediately. Known portrait/landscape frames still use
+  their original ratios before downloading.
+- This intentionally supersedes the earlier entire-visit fallback freeze. No
+  backend or database change; physical Android verification remains outstanding.

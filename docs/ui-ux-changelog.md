@@ -92,3 +92,22 @@ visible frame remains stable while media loads.
 Fix the media-dimensions regression test fixtures to use distinct WhatsApp IDs;
 assert that all four test messages are inserted, avoiding a unique-ID collision
 and subsequent foreign-key failure during release checks.
+
+## Camera image upload latency and feedback
+
+Optimize large camera captures locally before preview: maximum 2048-pixel longest
+side, JPEG quality 85%, use the result only when it reduces file size. Keep small
+photos and ordinary file/paste uploads intact; decoding/encoding failure retains
+the original validation path. Show preparation and sending status with a spinner,
+block send while preparing or sending, and retain failed drafts for manual retry.
+This reduces the bytes sent both to Wisp and onward to WhatsApp; real-world
+latency still depends on the mobile uplink and WhatsApp acknowledgement.
+
+## Resolve unknown camera/image frames
+
+Allow an initially unknown media frame to adopt decoded image/video dimensions
+once within the same chat visit. Preserve the visible reading anchor or the
+latest-message bottom position. Keep known/resolved frames stable across media
+status updates; later visits reuse the learned size. This supersedes the earlier
+rule that kept an unknown 3:2 fallback for the entire visit. Use proportional
+small image previews in the composer as well.

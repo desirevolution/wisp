@@ -4,6 +4,7 @@ import { live } from 'lit/directives/live.js';
 import { emojiMatch, rememberEmoji } from '../lib/emoji.js';
 import { mediaLabel } from '../lib/utils.js';
 import { sessionDrafts } from '../core/drafts.js';
+import { prepareCameraImage } from '../services/camera-image.js';
 import './wisp-emoji-picker.js';
 
 export class WispComposer extends LitElement {
@@ -80,11 +81,22 @@ export class WispComposer extends LitElement {
     if (!files.length) return; // Text and image URLs retain normal paste behaviour.
     e.preventDefault(); this._attachImage(files[0]);
   }
-  _onFile(e) { this._attachImage(e.target.files?.[0]); e.target.value = ''; }
+  async _onFile(e) {
+    const file=e.target.files?.[0],camera=e.target.id==='cameraFile',chat=this.chatId;
+    e.target.value='';
+    if(!camera||!file){this._attachImage(file);return}
+    if(this.blocked||!chat||this.draft.sending||this.draft.preparingImage)return;
+    const previousImage=this.draft.image;
+    sessionDrafts.update(chat,{preparingImage:true,error:''});
+    try{
+      const prepared=await prepareCameraImage(file);
+      if(this.chatId===chat&&this.draft.image===previousImage)this._attachImage(prepared);
+    }finally{sessionDrafts.update(chat,{preparingImage:false})}
+  }
   removeImage() { if (!this.draft.sending) sessionDrafts.update(this.chatId, { image: null, error: '' }); }
   async send() {
     const chat = this.chatId, draft = this.draft, text = draft.text.trim();
-    if (this.blocked || !chat || draft.sending || (!text && !draft.image)) return;
+    if (this.blocked || !chat || draft.sending || draft.preparingImage || (!text && !draft.image)) return;
     const revision = draft.revision;
     sessionDrafts.update(chat, { sending: true, error: '' });
     try {
@@ -113,7 +125,8 @@ export class WispComposer extends LitElement {
   render() {
     const d = this.draft;
     return html`<div class="composer-wrap">
-      ${d.image ? html`<div class="image-draft"><img src=${d.image.url} alt="Image to send"><div><b>Image ready to send</b><small>${(d.image.file.size / 1024 / 1024).toFixed(1)} MiB · PNG/JPEG · max. 10 MiB</small></div><button type="button" aria-label="Remove image" title="Remove image" ?disabled=${d.sending || this.blocked} @click=${this.removeImage}>${icon('close')}</button></div>` : null}
+      ${d.image ? html`<div class="image-draft"><img src=${d.image.url} alt="Image to send"><div><b>${d.sending?'Sending image…':'Image ready to send'}</b><small>${(d.image.file.size / 1024 / 1024).toFixed(1)} MiB · PNG/JPEG · max. 10 MiB</small></div><button type="button" aria-label="Remove image" title="Remove image" ?disabled=${d.sending || this.blocked} @click=${this.removeImage}>${icon('close')}</button></div>` : null}
+      ${d.preparingImage||d.sending?html`<div class="send-progress" role="status"><span class="sync-spinner" aria-hidden="true"></span>${d.preparingImage?'Preparing photo…':d.image?'Sending image… Uploading and waiting for WhatsApp confirmation.':'Sending message…'}</div>`:null}
       ${d.reply ? html`<div class="reply-draft"><div><b>Reply to ${d.reply.sender_name}</b><span>${d.reply.body || mediaLabel(d.reply.type)}</span></div><button type="button" aria-label="Cancel reply" title="Cancel reply (Escape)" ?disabled=${d.sending || this.blocked} @click=${this.cancelReply}>${icon('close')}</button></div>` : null}
       <div id="emojiPicker" class="emoji-picker" ?hidden=${!this.pickerOpen}>
         <wisp-emoji-picker @emoji-pick=${e => this._insertEmoji(e.detail.emoji)} @picker-close=${() => { this.closePicker(); this.focusInput(); }}></wisp-emoji-picker>
@@ -128,7 +141,7 @@ export class WispComposer extends LitElement {
         <button class="image-btn camera-btn" type="button" aria-label="Take photo" title="Take photo" ?disabled=${d.sending || this.blocked} @click=${() => this.querySelector('#cameraFile')?.click()}>${icon('camera')}</button>
         <button id="emojiBtn" class="emoji-btn" type="button" aria-label="Emoji" title="Emoji" ?disabled=${d.sending || this.blocked} @click=${this.togglePicker}>${icon('smile')}</button>
         <textarea id="composerInput" rows="1" maxlength="4000" placeholder=${d.image ? "Image caption (optional)" : "Message"} aria-label=${d.image ? "Image caption" : "Message"} .value=${live(d.text)} ?disabled=${d.sending || this.blocked} @paste=${this._onPaste} @input=${this._onInput} @keydown=${this._onKeydown}></textarea>
-        <button id="sendBtn" class="send-btn" type="button" aria-label="Send" title="Send" ?disabled=${d.sending || this.blocked || (!d.text.trim() && !d.image)} @click=${this.send}>${icon('send')}</button>
+        <button id="sendBtn" class="send-btn" type="button" aria-label="Send" title="Send" ?disabled=${d.sending || d.preparingImage || this.blocked || (!d.text.trim() && !d.image)} @click=${this.send}>${d.sending?html`<span class="sync-spinner" aria-hidden="true"></span>`:icon('send')}</button>
       </div>
       <div id="sendError" class="send-error" role="alert" ?hidden=${!d.error}>${d.error}</div>
     </div>`;

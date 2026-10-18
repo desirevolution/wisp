@@ -206,6 +206,33 @@ try{
  assert.equal(imageSent.length,beforeCameraSend);
  assert.equal(await mobile.page.locator('#composerInput').inputValue(),'Mobile line\n');
  await mobile.page.getByRole('button',{name:'Remove image',exact:true}).click();
+ // Large native camera captures are resized before preview/upload. A held send
+ // visibly stays in progress and cannot be submitted twice.
+ const cameraPhoto=await mobile.page.evaluate(async()=>{
+   const canvas=document.createElement('canvas');canvas.width=3200;canvas.height=2400;
+   const ctx=canvas.getContext('2d'),gradient=ctx.createLinearGradient(0,0,3200,2400);
+   gradient.addColorStop(0,'#036');gradient.addColorStop(1,'#fd6');ctx.fillStyle=gradient;ctx.fillRect(0,0,3200,2400);
+   return canvas.toDataURL('image/jpeg',.98).split(',')[1];
+ });
+ const cameraBytes=Buffer.from(cameraPhoto,'base64');
+ await mobile.page.locator('#cameraFile').setInputFiles({name:'large-camera.jpg',mimeType:'image/jpeg',buffer:cameraBytes});
+ await mobile.page.waitForFunction(()=>{const el=document.querySelector('.image-draft img');return el?.complete&&el.naturalWidth===2048&&el.naturalHeight===1536});
+ const optimizedSize=await mobile.page.locator('#composer').evaluate(el=>el.draft.image.file.size);
+ assert.ok(optimizedSize<cameraBytes.length,'Camera optimization must reduce the upload size');
+ const cameraPreview=await mobile.page.locator('.image-draft img').boundingBox();
+ assert.ok(Math.abs(cameraPreview.width/cameraPreview.height-4/3)<.02,'Camera preview must use its actual aspect ratio');
+ let releaseCameraSend;
+ const cameraGate=new Promise(resolve=>{releaseCameraSend=resolve});
+ await mobile.page.route('**/send-image',async route=>{await cameraGate;await route.continue()});
+ await mobile.page.locator('#sendBtn').click();
+ await mobile.page.locator('.send-progress').waitFor();
+ assert.match(await mobile.page.locator('.send-progress').textContent(),/WhatsApp confirmation/);
+ assert.equal(await mobile.page.locator('#sendBtn').isDisabled(),true);
+ releaseCameraSend();await mobile.page.waitForFunction(()=>!document.querySelector('.image-draft'));
+ await mobile.page.unroute('**/send-image');
+ assert.equal(await mobile.page.locator('#composerInput').inputValue(),'');
+ console.log(`Camera photo: ${cameraBytes.length} -> ${optimizedSize} bytes; 3200x2400 -> 2048x1536; held send remains visible`);
+ await mobile.page.locator('#composerInput').fill('Mobile line\n');
  await mr.getByRole('button',{name:'Message actions',exact:true}).click();await mobile.page.locator('.message-popover').waitFor();
  await mobile.page.locator('.message-sheet').getByRole('button',{name:'Close',exact:true}).click();await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));
  assert.equal(await mobile.page.evaluate(()=>history.length),await mobile.page.evaluate(()=>window.startHistoryLength));
@@ -276,7 +303,9 @@ try{
  const beforeImage=await frame.boundingBox(),beforeTail=await mp.locator('[data-message-id="after-portrait"]').boundingBox();
  releaseImage();await mp.locator('[data-message-id="portrait-message"] .media-loaded').waitFor();
  const afterImage=await frame.boundingBox(),afterTail=await mp.locator('[data-message-id="after-portrait"]').boundingBox();
- assert.deepEqual(afterImage,beforeImage,'Image decoding must not resize its frame');assert.equal(afterTail.y,beforeTail.y,'Image decoding must not move following messages');
+ assert.ok(Math.abs(beforeImage.width/beforeImage.height-1.5)<.01,'Missing metadata starts with the temporary fallback');
+ assert.ok(Math.abs(afterImage.width/afterImage.height-.25)<.01,'Unknown frame must resolve to the decoded portrait aspect ratio');
+ assert.ok(Math.abs(afterTail.y-beforeTail.y)<2,'Resolving the frame must preserve the reading position at the bottom');
  assert.equal(await image.evaluate(el=>getComputedStyle(el).objectFit),'contain');
  if(process.env.WISP_PREPARED_SCREENSHOT)await mp.screenshot({path:process.env.WISP_PREPARED_SCREENSHOT});
  for(const status of ['pending','failed','ready']){
@@ -284,11 +313,11 @@ try{
    if(status==='ready')await mp.locator('[data-message-id="portrait-message"] .media-loaded').waitFor();
    else await mp.locator('[data-message-id="portrait-message"] .media-placeholder').waitFor();
    const transitioned=await frame.boundingBox();
-   assert.equal(transitioned.width,beforeImage.width,`Width changed for media status ${status}`);
-   assert.equal(transitioned.height,beforeImage.height,`Height changed for media status ${status}`);
+   assert.equal(transitioned.width,afterImage.width,`Width changed for media status ${status}`);
+   assert.equal(transitioned.height,afterImage.height,`Height changed for media status ${status}`);
  }
 
- // Only a later visit may use the intrinsic portrait ratio learned above.
+ // Later visits use the learned portrait ratio immediately.
  await mp.locator(`[data-id="${chat}"]`).click();await mp.locator('[data-message-id="g@g.us-59"]').waitFor();
  await mp.locator(`[data-id="${other}"]`).click();await mp.locator('[data-message-id="portrait-message"]').waitFor();
  const learned=await frame.boundingBox();assert.ok(Math.abs(learned.width/learned.height-.25)<.01,JSON.stringify(learned));
@@ -320,6 +349,26 @@ try{
  await failurePage.locator('[data-message-id="portrait-message"]').waitFor();
  assert.equal(await failurePage.locator('#composerInput').isDisabled(),false);
  await failureContext.close();
+ // Resolving an unknown image above an older reading position preserves the
+ // first visible message, including when browser scroll anchoring also runs.
+ const anchorBefore=await mp.evaluate(async()=>{
+   const list=document.createElement('wisp-message-list');list.id='anchor-regression-list';list.className='messages';
+   list.style.cssText='position:fixed;inset:0 auto auto 0;width:400px;height:240px;overflow:auto;z-index:9999';
+   list.chatId='anchor-test';list.hasSelection=true;
+   const base={chat_id:'anchor-test',timestamp:1790764000,type:'chat',from_me:0,reactions:[]};
+   list.messages=[{...base,id:'anchor-media',type:'image',has_media:1,media_id:'anchor-portrait',media_status:'pending'},...Array.from({length:25},(_,i)=>({...base,id:`anchor-${i}`,body:`Reading message ${i}`}))];
+   document.body.append(list);await list.updateComplete;list.scrollTop=500;
+   const top=list.getBoundingClientRect().top;
+   const anchor=[...list.querySelectorAll('[data-message-id]')].find(el=>el.getBoundingClientRect().bottom>top);
+   const before={id:anchor.dataset.messageId,top:anchor.getBoundingClientRect().top};
+   list.messages=list.messages.map(m=>m.id==='anchor-media'?{...m,media_id:'demo-portrait',media_status:'ready'}:m);
+   await list.updateComplete;list.querySelector('img').loading='eager';
+   return before;
+ });
+ await mp.locator('#anchor-regression-list .media-loaded').waitFor();
+ const anchorAfter=await mp.locator(`#anchor-regression-list [data-message-id="${anchorBefore.id}"]`).boundingBox();
+ assert.ok(Math.abs(anchorAfter.y-anchorBefore.top)<2,JSON.stringify({anchorBefore,anchorAfter}));
+ await mp.locator('#anchor-regression-list').evaluate(el=>el.remove());
  assert.deepEqual(staged.errors,[]);await staged.context.close();
  console.log('Prepared chat: 150ms quiet loading, hidden layout, disabled input, stable delayed image, learned ratio and latest selection passed');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}

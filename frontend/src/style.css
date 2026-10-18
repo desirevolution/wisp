@@ -292,14 +292,16 @@ button:focus-visible{outline:2px solid #53bdeb;outline-offset:2px}
 
 /* Single-image paste/file drafts share the existing composer. */
 .image-draft{display:flex;align-items:center;gap:12px;padding:8px;margin-bottom:8px;background:#2a3942;border-radius:8px}
-.image-draft img{width:88px;height:72px;object-fit:contain;flex-shrink:0;background:#111b21;border-radius:5px}
+.image-draft img{width:auto;height:auto;max-width:88px;max-height:72px;object-fit:contain;flex-shrink:0;background:#111b21;border-radius:5px}
 .image-draft div{flex:1;min-width:0}.image-draft b,.image-draft small{display:block}.image-draft small{color:#aebac1;margin-top:5px}
 .image-draft button{background:none;border:0;color:#aebac1;font-size:25px;cursor:pointer;padding:8px}
+.send-progress{display:flex;align-items:center;gap:8px;padding:4px 0 8px;color:#c4ded7;font-size:13px}
+.send-progress .sync-spinner{flex:none}
 .image-btn{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:38px;height:40px;background:none;border:0;color:#aebac1;cursor:pointer;border-radius:8px}
 .image-btn:hover{background:#2a3942}.image-btn:disabled,.image-draft button:disabled{opacity:.45;cursor:default}
 .camera-btn{display:none}
 @media(max-width:700px){.camera-btn{display:flex}}
-@media(max-width:700px){.composer{gap:4px}.image-draft{gap:8px}.image-draft img{width:72px;height:64px}.image-draft b{font-size:14px}.image-draft small{font-size:11px}}
+@media(max-width:700px){.composer{gap:4px}.image-draft{gap:8px}.image-draft img{max-width:72px;max-height:64px}.image-draft b{font-size:14px}.image-draft small{font-size:11px}}
 
 /* Resize the shell above the virtual keyboard, including visual-only browsers. */
 .app{position:fixed;left:0;top:var(--app-viewport-top,0px);height:var(--app-viewport-height,100dvh)}

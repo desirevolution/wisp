@@ -1,4 +1,4 @@
-// Intrinsic sizes learned this session; never resize an already displayed frame.
+// Intrinsic sizes learned this session; unknown frames may resolve once on decode.
 const dimensions = new Map();
 const keyFor = message => message.media_id || message.id;
 function valid(width,height){return Number.isFinite(width)&&Number.isFinite(height)&&width>0&&height>0;}

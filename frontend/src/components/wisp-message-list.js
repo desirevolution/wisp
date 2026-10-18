@@ -38,8 +38,22 @@ export class WispMessageList extends LitElement {
   }
   async mediaReady(event,m){
     const el=event.currentTarget;
-    rememberMediaSize(m,el.naturalWidth||el.videoWidth,el.naturalHeight||el.videoHeight);
+    const width=el.naturalWidth||el.videoWidth,height=el.naturalHeight||el.videoHeight;
+    rememberMediaSize(m,width,height);
     try{await el.decode?.()}catch{/* Broken images retain the stable fallback frame. */}
+    if(!el.isConnected)return;
+    const frame=this._mediaFrames.get(m.id);
+    if(frame&&!frame.known&&width>0&&height>0){
+      const atBottom=this.scrollHeight-this.scrollTop-this.clientHeight<80;
+      const top=this.getBoundingClientRect().top;
+      const anchor=[...this.querySelectorAll('[data-message-id]')].find(node=>node.getBoundingClientRect().bottom>top);
+      const offset=anchor?.getBoundingClientRect().top;
+      this._mediaFrames.set(m.id,mediaFrameFor({...m,media_width:width,media_height:height}));
+      this.requestUpdate();await this.updateComplete;
+      if(!el.isConnected)return;
+      if(atBottom)this.scrollTop=Math.max(0,this.scrollHeight-this.clientHeight);
+      else if(anchor?.isConnected)this.scrollTop+=anchor.getBoundingClientRect().top-offset;
+    }
     if(el.isConnected){el.classList.add('media-loaded');el.parentElement?.classList.add('media-ready')}
   }
   mediaFailed(event){const el=event.currentTarget;el.classList.add('media-failed');const label=el.parentElement?.querySelector('.media-frame-status');if(label)label.textContent='Media could not be displayed.'}

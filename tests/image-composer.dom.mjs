@@ -21,6 +21,9 @@ c._attachImage(new File([new Uint8Array(10*1024*1024+1)],'large.png',{type:'imag
 globalThis.fetch=async()=>({ok:false,json:async()=>({error:'Upload failed'})});await c.send();assert.equal(c.draft.image.url,url);assert.equal(c.draft.text,'Caption');assert.equal(c.draft.reply.message_id,'original');assert.equal(c.draft.error,'Upload failed');
 let finish;globalThis.fetch=async(url,options)=>{calls.push({url,options});return new Promise(resolve=>finish=()=>resolve({ok:true,json:async()=>({ok:true})}))};
 const sending=c.send();assert.equal(c.draft.sending,true);c._attachImage(image);assert.equal(c.draft.image.url,url);
+await c.updateComplete;
+assert.match(c.querySelector('.send-progress').textContent,/Sending image/);
+assert.equal(c.querySelector('#sendBtn').disabled,true);
 const req=calls.at(-1);assert.ok(req.url.endsWith('/send-image'));assert.equal(req.options.headers,undefined);assert.equal(req.options.body.get('caption'),'Caption');assert.equal(req.options.body.get('reply_to'),'original');assert.equal(req.options.body.get('image').name,'screenshot.png');
 c.chatId='other@g.us';await c.updateComplete;c._attachImage(image);const otherURL=c.draft.image.url;
 finish();await sending;assert.equal(sessionDrafts.get('group@g.us').image,null);assert.equal(sessionDrafts.get('group@g.us').text,'');assert.ok(revoked.includes(url));assert.equal(c.draft.image.url,otherURL);
