@@ -28,8 +28,8 @@ proxy; Wisp has no built-in login or user permissions.
 ## Screenshots
 
 <p align="center">
-  <a href="screenshots/wisp-desktop.png?v=2" target="_blank">
-    <img src="screenshots/wisp-desktop.png?v=2" width="1200" alt="Desktop">
+  <a href="screenshots/wisp-desktop.png?v=3" target="_blank">
+    <img src="screenshots/wisp-desktop.png?v=3" width="1200" alt="Desktop">
   </a>
   <br>
   <sub><b>Desktop</b></sub>
@@ -38,27 +38,12 @@ proxy; Wisp has no built-in login or user permissions.
 <br>
 
 <p align="center">
-  <a href="screenshots/wisp-mobile.png?v=2" target="_blank">
-    <img src="screenshots/wisp-mobile.png?v=2" width="400" alt="Mobile">
+  <a href="screenshots/wisp-mobile.png?v=3" target="_blank">
+    <img src="screenshots/wisp-mobile.png?v=3" width="400" alt="Mobile">
   </a>
   <br>
   <sub><b>Mobile</b></sub>
 </p>
-
-## Chat presentation
-
-Chat changes use a quiet loading surface for at least 150 ms while the next
-conversation is laid out and positioned out of view. The composer is disabled
-until the chat is ready. Cached messages can be shown without waiting for the
-server refresh; the latest selected chat wins during rapid switching.
-
-Image/video previews reserve their original aspect ratio before downloading, using
-retained WhatsApp dimensions for both new and existing messages. Small images are
-not enlarged. Only missing dimensions use a fixed 3:2 frame; the complete image
-fits inside without cropping. Downloaded dimensions are remembered for later chat visits within the current browser
-session. If dimensions were missing, the temporary frame adjusts once after decoding
-while preserving the reading anchor or the bottom position. Known frames remain
-stable. Draft previews also follow the image aspect ratio.
 
 ## Docker quick start
 
