@@ -1,21 +1,24 @@
+import { icon } from '../lib/icons.js';
+import { chatMuted, muteLabel } from '../core/chat-state.js';
 import { LitElement, html } from 'lit';
 import { chatStamp, dateFmt, displayName, fmt, mediaLabel, rawId } from '../lib/utils.js';
 
 export class WispChatList extends LitElement {
   static properties = {
-    error:{}, chats: { attribute: false }, selected: {}, filter: {}, searchResults: { attribute: false },
+    chatStates:{attribute:false}, error:{}, chats: { attribute: false }, selected: {}, filter: {}, searchResults: { attribute: false },
     unread: { attribute: false }, keyboardSelection: {}
   };
-  constructor(){super();this.chats=[];this.selected=null;this.filter='';this.searchResults=null;this.unread=new Map();this.keyboardSelection=null}
+  constructor(){super();this.chats=[];this.chatStates=new Map();this.selected=null;this.filter='';this.searchResults=null;this.unread=new Map();this.keyboardSelection=null}
   createRenderRoot(){return this}
   _chatClick(id){this.dispatchEvent(new CustomEvent('chat-open',{detail:{id,fromSearch:Boolean(this.filter&&this.searchResults)},bubbles:true,composed:true}))}
   _messageClick(chatId,messageId){this.dispatchEvent(new CustomEvent('message-open',{detail:{chatId,messageId},bubbles:true,composed:true}))}
   _chat(c, search=false){
+    const pref=this.chatStates.get(c.id)||c,muted=chatMuted(pref);
     const name=displayName(c.name,c.id,c.type),count=this.unread?.get(c.id)||0;
-    if(search)return html`<button class="chat search-chat ${this.selected===c.id?'active':''} ${this.keyboardSelection===`chat:${c.id}`?'keyboard-selected':''}" data-key="chat:${c.id}" data-id=${c.id} @click=${()=>this._chatClick(c.id)}><span class="chat-main"><span class="chat-name">${name}</span></span></button>`;
+    if(search)return html`<button class="chat search-chat ${this.selected===c.id?'active':''} ${this.keyboardSelection===`chat:${c.id}`?'keyboard-selected':''}" data-key="chat:${c.id}" data-id=${c.id} @click=${()=>this._chatClick(c.id)}><span class="chat-main"><span class="chat-name">${name}${muted?html`<span class="chat-muted" aria-label=${muteLabel(pref)} title=${muteLabel(pref)}>${icon('mute')}</span>`:null}</span></span></button>`;
     const sender=c.type==='group'&&c.last_sender_name&&!rawId(c.last_sender_name)?`${c.last_sender_name}: `:'';
-    const preview=`${c.last_from_me?'You: ':sender}${c.last_body||mediaLabel(c.last_type)}`;
-    return html`<button class="chat ${this.selected===c.id?'active':''} ${count?'unread':''} ${this.keyboardSelection===`chat:${c.id}`?'keyboard-selected':''}" data-key="chat:${c.id}" data-id=${c.id} @click=${()=>this._chatClick(c.id)}><span class="chat-main"><span class="chat-name">${count?html`<i class="unread-dot"></i>`:''}${name}</span><span class="chat-meta">${count?html`<em class="unread-count">${count}</em>`:''}<time>${chatStamp(c.last_message_at)}</time></span></span><span class="preview">${preview}</span></button>`;
+    const preview=!c.last_type&&!c.last_body?'No messages yet':`${c.last_from_me?'You: ':sender}${c.last_body||mediaLabel(c.last_type)}`;
+    return html`<button class="chat ${this.selected===c.id?'active':''} ${count?'unread':''} ${this.keyboardSelection===`chat:${c.id}`?'keyboard-selected':''}" data-key="chat:${c.id}" data-id=${c.id} @click=${()=>this._chatClick(c.id)}><span class="chat-main"><span class="chat-name">${count?html`<i class="unread-dot"></i>`:''}${name}${muted?html`<span class="chat-muted" aria-label=${muteLabel(pref)} title=${muteLabel(pref)}>${icon('mute')}</span>`:null}</span><span class="chat-meta">${count?html`<em class="unread-count">${count}</em>`:''}<time>${chatStamp(c.last_message_at)}</time></span></span><span class="preview">${preview}</span></button>`;
   }
   render(){
     if(this.error)return html`<div class="empty small" role="alert">${this.error}</div>`;

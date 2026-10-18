@@ -152,3 +152,39 @@ func TestOnlyIncomingMessagesGeneratePushAndCloseCancelsSend(t *testing.T) {
 		t.Fatal("shutdown did not cancel provider call")
 	}
 }
+
+func TestMutedAndPreviouslyMutedMessagesNeverPush(t *testing.T) {
+	s := testService(t, "https://push.example/device")
+	s.st.OpenChat("c", "Contact", "private")
+	calls := 0
+	s.send = func(context.Context, []byte, *webpush.Subscription, *webpush.Options) (*http.Response, error) {
+		calls++
+		return response(201), nil
+	}
+	s.st.ChangeChatState("c", "mute", -1)
+	s.notify(model.Message{ID: "muted", ChatID: "c", Body: "quiet"})
+	s.st.ChangeChatState("c", "mute", 0)
+	s.notify(model.Message{ID: "queued-muted", ChatID: "c", Body: "quiet", Silent: true})
+	if calls != 0 {
+		t.Fatal("muted messages reached push provider")
+	}
+	s.notify(model.Message{ID: "new", ChatID: "c", Body: "hello"})
+	if calls != 1 {
+		t.Fatal("unmuted message lost", calls)
+	}
+}
+
+func TestMutingStopsPendingPushRetries(t *testing.T) {
+	s := testService(t, "https://push.example/device")
+	s.st.OpenChat("c", "Contact", "private")
+	calls := 0
+	s.send = func(context.Context, []byte, *webpush.Subscription, *webpush.Options) (*http.Response, error) {
+		calls++
+		s.st.ChangeChatState("c", "mute", -1)
+		return response(503), nil
+	}
+	s.notify(model.Message{ID: "retry", ChatID: "c", Body: "hello"})
+	if calls != 1 {
+		t.Fatal("push retried after mute", calls)
+	}
+}

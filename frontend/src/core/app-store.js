@@ -51,6 +51,8 @@ export function createAppStore(initialState = {}) {
 export function createInitialAppState() {
   return {
     chats: [],
+    chatStates: new Map(),
+    knownChats: new Map(),
     selectedChatId: null,
     connection: { state: 'starting' },
     sendEnabled: false,

@@ -195,7 +195,7 @@ func (s *Service) SendImage(ctx context.Context, chat, caption, replyTo string, 
 		fmt.Printf("[send-image] cache failed message=%s: %v\n", id, err)
 	}
 	if inserted {
-		s.bus.Publish(buspkg.Event{Type: "message", Data: m})
+		s.publishLiveMessage(m)
 	}
 	if err == nil {
 		s.bus.Publish(buspkg.Event{Type: "media", Data: map[string]any{"messageId": id, "chatId": chat, "media": row}})

@@ -3,6 +3,7 @@ package model
 import "time"
 
 type Message struct {
+	Silent                bool             `json:"silent,omitempty"`
 	Edited                bool             `json:"edited"`
 	EditedAt              int64            `json:"edited_at"`
 	EditVersion           int64            `json:"edit_version"`

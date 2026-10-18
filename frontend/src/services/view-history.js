@@ -14,8 +14,11 @@ export function createViewHistory({ win = window, onChange }) {
   win.addEventListener('popstate',pop);
   return {
     current,
+    openOverlay(mode){if(!current().overlay)win.history.pushState({...current(),overlay:mode},'')},
+    closeOverlay(){if(current().overlay){win.history.back();return true}return false},
     openChat(chatId,{preserveImage=false}={}){
       const previous=current();
+      if(preserveImage&&previous.overlay&&previous.chatId===chatId)return;
       if(previous.view==='image'){
         if(preserveImage&&previous.chatId===chatId)return;
         pendingChat=chatId;win.history.back();return;

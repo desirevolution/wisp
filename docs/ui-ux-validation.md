@@ -219,3 +219,19 @@ Based on the new uploaded `wisp-main(8).zip`.
   page collapses the image history layer, so the next Back goes to the overview
   and a further Back reaches the previous external page.
 - Physical Android installed-PWA behavior remains a device smoke test.
+
+
+## Chat lifecycle and mute regression coverage
+
+`npm run test:browser` also runs `tests/browser-chat-controls.spec.mjs`, using
+separate desktop and mobile browser contexts and a deterministic API/SSE fixture.
+It covers confirmation/cancellation, remote-open chat retention, remote and
+offline draft deletion, mute synchronization, unread counts, closed-search
+filtering, expiry without reopening, next-message reopening, new contacts,
+contact-list retry and modal Escape/Browser Back. Native WhatsApp contact sync,
+real delivery, and physical-device keyboard behavior remain manual checks.
+
+Store/API/WhatsApp tests cover state persistence, concurrent close revisions,
+history/reaction imports, valid mute durations, contact validation and preserving
+UI events. Push and MQTT tests verify both current mute and a queued message's
+captured mute decision. Draft unit tests cover revision tombstones across reloads.

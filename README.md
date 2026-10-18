@@ -166,3 +166,73 @@ This project was built with AI assistance. I'm a lazy dev.
 ## License
 
 [MIT](LICENSE).
+<<<<<<< Updated upstream
+=======
+
+## Version and update checks
+
+Published Docker images and binaries embed the exact GitHub release tag. Check it
+in Settings or without starting Wisp:
+
+```sh
+./wisp --version
+docker run --rm ghcr.io/desirevolution/wisp:latest --version
+```
+
+The backend checks the newest stable GitHub release once every 24 hours. Results
+and the last attempt are kept in the existing database, including across restarts.
+The app shows an update notice with a release link; Settings also show the latest
+check time. Checks run in the background and failures do not block chatting.
+Updates are installed manually. Development builds display `dev` or `dev-<commit>`
+and do not claim to be up to date against a stable release.
+
+For a local versioned build, use `VERSION=v1.2.3 sh build-static.sh`,
+`VERSION=v1.2.3 sh scripts/build-binaries.sh`, or Docker's
+`--build-arg VERSION=v1.2.3`. Plain `go build` defaults to `dev`; the equivalent
+linker option is `-ldflags="-X wisp/internal/appconfig.Version=v1.2.3"`.
+
+After a successful own image send, the chat follows the uploaded image, including
+late media layout. Delayed sends do not move another chat's reading position.
+
+## Back navigation and image viewing
+
+Opening a chat adds one browser history entry above the chat overview. Switching
+between chats replaces that entry: Browser/Android Back returns to the overview,
+and Back again uses normal browser/PWA navigation to leave Wisp. The in-app Back
+button also returns to the overview. Browser Forward restores the selected chat.
+
+Chat images and stickers open inside the right-hand chat pane, including in the
+installed PWA. The desktop chat list remains available. Use the normal header
+Back button, Escape or Browser Back to return to the same chat;
+images no longer navigate the PWA to a raw media endpoint or open a separate tab.
+The image page and selected chat can also be restored after a reload.
+
+
+### Close, reopen and mute chats
+
+Use **Chat menu → Close chat…** to hide a conversation across all Wisp devices.
+Confirmation is required. Closing marks it as read in Wisp and discards its text,
+reply and image drafts on every device. Offline devices discard an old draft
+when they next synchronize. Stored messages and media remain subject to the
+normal retention settings; nothing is deleted from WhatsApp or marked read there.
+A chat already open on another device stays on screen until you leave it.
+
+**New chat** searches stored conversations (including ones labelled **Closed
+chat**) and the linked account's locally synchronized WhatsApp contacts. Selecting
+a result immediately adds it to the chat list, even before sending anything.
+It does not create a WhatsApp group or accept arbitrary phone numbers. Closed
+chats and their messages are excluded from the normal search.
+
+Use **Chat menu → Mute chat…** for **8 hours**, **1 week**, or **Indefinitely**.
+Mute applies across Wisp devices and suppresses push notifications, MQTT message
+publications and in-app auto-follow; internal SSE synchronization continues.
+Open chats still show unread counts. A crossed-out bell identifies a muted chat,
+and the menu shows its expiry time or offers **Unmute chat**.
+
+Closing and muting are independent. A newly received or successfully sent live
+message reopens a closed, unmuted chat. A muted chat stays closed. Reactions,
+edits and imported history do not reopen chats. Expiry/unmute alone does not
+reopen a chat or replay suppressed notifications; only the next live message
+reopens it. Manual reopening keeps its mute setting. WhatsApp's own archive and
+mute settings are unchanged.
+>>>>>>> Stashed changes

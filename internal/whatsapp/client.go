@@ -419,7 +419,7 @@ func (s *Service) onMessage(e *events.Message) {
 	if m.Deleted {
 		s.bus.Publish(buspkg.Event{Type: "deletion", Data: map[string]any{"chat_id": m.ChatID, "message_id": m.ID}})
 	} else {
-		s.bus.Publish(buspkg.Event{Type: "message", Data: m})
+		s.publishLiveMessage(m)
 	}
 	if mediaDownload != nil {
 		go s.downloadMedia(m.ID, m.ChatID, mediaDownload)
@@ -1059,7 +1059,7 @@ func (s *Service) SendText(ctx context.Context, chat, text, replyTo string) (str
 	}
 	if inserted {
 		m.Body = s.mentionBody(ctx, m.ChatID, m.Body, m.MentionJIDs, true)
-		s.bus.Publish(buspkg.Event{Type: "message", Data: m})
+		s.publishLiveMessage(m)
 	}
 	return string(resp.ID), nil
 }

@@ -116,6 +116,9 @@ func (s *Service) run(ch <-chan events.Event) {
 	}
 }
 func (s *Service) notify(m model.Message) {
+	if m.Silent || s.st.ChatMuted(m.ChatID) {
+		return
+	}
 	title := strings.TrimSpace(s.st.ChatName(m.ChatID))
 	if title == "" && m.SenderName != nil {
 		title = strings.TrimSpace(*m.SenderName)
@@ -170,7 +173,7 @@ func (s *Service) notify(m model.Message) {
 				fmt.Printf("[push] invalid stored subscription provider=%s\n", shortEndpoint(endpoint))
 				return
 			}
-			s.deliver(b, &sub, m.ID)
+			s.deliver(b, &sub, m.ID, m.ChatID)
 		}(endpoint, raw)
 	}
 	workers.Wait()
@@ -203,10 +206,10 @@ func truncate(s string, limit int) string {
 	return string(r[:limit-1]) + "…"
 }
 
-func (s *Service) deliver(b []byte, sub *webpush.Subscription, messageID string) {
+func (s *Service) deliver(b []byte, sub *webpush.Subscription, messageID string, chatID ...string) {
 	device, provider := deviceID(sub.Endpoint), shortEndpoint(sub.Endpoint)
 	for attempt := 0; attempt < 3; attempt++ {
-		if s.ctx.Err() != nil {
+		if s.ctx.Err() != nil || (len(chatID) > 0 && s.st.ChatMuted(chatID[0])) {
 			return
 		}
 		started := time.Now()

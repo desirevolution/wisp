@@ -91,6 +91,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("/api/whatsapp/reconnect", s.whatsappReconnect)
 	m.HandleFunc("/api/whatsapp/logout", s.whatsappLogout)
 	m.HandleFunc("/api/chats", s.chats)
+	m.HandleFunc("/api/chat-options", s.chatOptions)
 	m.HandleFunc("/api/search", s.search)
 	m.HandleFunc("/api/chats/", s.chat)
 	m.HandleFunc("/api/events", s.sse)
@@ -126,8 +127,13 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		state := s.updateChecker.Status()
 		update = &state
 	}
+	prefs, err := s.st.ChatStates()
+	if err != nil {
+		jsonOut(w, 500, map[string]string{"error": "Could not load chat settings"})
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
-	jsonOut(w, 200, map[string]any{"version": appconfig.Version, "update": update, "whatsapp": s.wa.Status(), "push": s.push.Status(), "send": map[string]any{"enabled": !s.st.ConfigBool("mirrorOnly", false)}})
+	jsonOut(w, 200, map[string]any{"chat_states": prefs, "version": appconfig.Version, "update": update, "whatsapp": s.wa.Status(), "push": s.push.Status(), "send": map[string]any{"enabled": !s.st.ConfigBool("mirrorOnly", false)}})
 }
 func (s *Server) pushPublicKey(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -238,6 +244,26 @@ func (s *Server) chats(w http.ResponseWriter, r *http.Request) {
 		jsonOut(w, 500, map[string]string{"error": e.Error()})
 		return
 	}
+	prefs, err := s.st.ChatStates()
+	if err != nil {
+		jsonOut(w, 500, map[string]string{"error": "Could not load chat settings"})
+		return
+	}
+	states := map[string]store.ChatState{}
+	for _, p := range prefs {
+		states[p.ChatID] = p
+	}
+	visible := []map[string]any{}
+	for _, row := range x {
+		id, _ := row["id"].(string)
+		p := states[id]
+		if p.Closed {
+			continue
+		}
+		row["mute_until"] = p.MuteUntil
+		visible = append(visible, row)
+	}
+	x = visible
 	s.wa.ResolveMentionRows(r.Context(), x, "id", "last_body", "last_message_id")
 	jsonOut(w, 200, x)
 }
@@ -269,6 +295,10 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := urlDecode(parts[0])
+	if len(parts) == 2 && parts[1] == "state" {
+		s.changeChatState(w, r, id)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "edits" && r.Method == http.MethodGet {
 		ids := r.URL.Query()["message_id"]
 		if len(ids) > 200 {

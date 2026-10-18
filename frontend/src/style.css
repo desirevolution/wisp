@@ -440,3 +440,29 @@ wisp-composer{display:block;grid-row:3;min-width:0}
 .quote-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
 .quote-thumbnail{width:52px;height:52px;flex:0 0 52px;object-fit:cover;border-radius:4px;background:#111b21}
 .quote-thumbnail[hidden]{display:none}
+
+/* Chat visibility and notification controls. */
+wisp-chat-controls{display:contents}
+dialog.chat-controls{width:min(480px,calc(100% - 24px));max-height:min(720px,calc(100dvh - 32px));margin:auto;padding:0;border:1px solid var(--border,#2a3942);border-radius:12px;background:#182229;color:#e9edef;box-shadow:0 18px 60px #0008;overflow:hidden}
+dialog.chat-controls::backdrop{background:#0009}
+.chat-controls header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #2a3942}
+.chat-controls h2{flex:1;min-width:0;margin:0;font-size:18px;overflow-wrap:anywhere}
+.chat-controls-body{padding:16px;overflow-y:auto;max-height:calc(100dvh - 110px);overscroll-behavior:contain}
+.chat-controls p{margin:0 0 14px;line-height:1.5;color:#b8c7ce}
+.chat-controls button{font:inherit;cursor:pointer}
+.chat-controls button:disabled{opacity:.6;cursor:wait}
+.chat-options-search{width:100%;min-height:44px;padding:10px 12px;border:1px solid #48626d;border-radius:8px;background:#111b21;color:#e9edef;margin-bottom:12px}
+.chat-options{display:grid;gap:3px;max-height:55dvh;overflow-y:auto;overscroll-behavior:contain}
+.chat-option{display:flex;flex-direction:column;gap:4px;width:100%;border:0;border-radius:6px;text-align:left;background:transparent;color:#e9edef;padding:12px;min-height:60px;overflow-wrap:anywhere}
+.chat-option:hover,.chat-option:focus-visible{background:#26343d}
+.chat-option small{color:#b8c7ce}
+.chat-menu-actions{display:grid;gap:8px}
+.chat-menu-actions>button,.chat-confirm-actions>button,.chat-controls-error+button{border:1px solid #48626d;border-radius:7px;background:#24343c;color:#e9edef;padding:10px 14px;min-height:44px;text-align:left}
+.chat-confirm-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.chat-confirm-actions .danger{background:#763a3a;border-color:#ba6666}
+.chat-controls .chat-controls-error{color:#ffd9d9;background:#3b2225;padding:10px;border-radius:6px}
+.chat-muted{display:inline-flex;align-items:center;flex:none;color:#aebfc7;vertical-align:middle;margin-left:7px}
+.chat-muted .wisp-icon{width:16px;height:16px}
+#headerMuted{margin-left:0}
+.chat-muted[hidden]{display:none}
+@media(max-width:700px){dialog.chat-controls{max-height:calc(var(--app-viewport-height,100dvh) - 24px)}.chat-controls-body{max-height:calc(var(--app-viewport-height,100dvh) - 100px)}}

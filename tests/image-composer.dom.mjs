@@ -31,4 +31,16 @@ c.removeImage();await c.updateComplete;assert.equal(c.querySelector('.image-draf
 // File selection uses the same preview and supports image-only messages.
 const target={files:[image],value:'selected'};c._onFile({target});assert.equal(target.value,'');await c.updateComplete;
 globalThis.fetch=async(url,options)=>{assert.equal(options.body.get('caption'),'');return {ok:true,json:async()=>({ok:true})}};await c.send();assert.equal(c.draft.image,null);
+// Remote close invalidates pending camera work, while ordinary caption edits
+// during photo preparation must not discard the photo.
+let releaseBitmap;
+globalThis.createImageBitmap=()=>new Promise(resolve=>releaseBitmap=()=>resolve({width:1,height:1,close(){}}));
+let camera=c._onFile({target:{id:'cameraFile',files:[image],value:'selected'}});
+sessionDrafts.update(c.chatId,{text:'Caption typed while preparing'});releaseBitmap();await camera;
+assert.ok(c.draft.image);assert.equal(c.draft.text,'Caption typed while preparing');
+c.removeImage();
+camera=c._onFile({target:{id:'cameraFile',files:[image],value:'selected'}});
+sessionDrafts.invalidate(c.chatId,c.draft.serverRevision+1);releaseBitmap();await camera;
+assert.equal(c.draft.image,null);assert.equal(c.draft.text,'');assert.equal(c.draft.preparingImage,false);
+delete globalThis.createImageBitmap;
 c.remove();await win.happyDOM.close();console.log('Image composer DOM passed: paste, preview, replacement, size/type errors, failed send, caption/reply, chat switch, removal, file input and image-only send');

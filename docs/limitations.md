@@ -21,7 +21,9 @@ Push is opt-in per browser/device, needs HTTPS and notification permission, and
 is affected by OS/browser policies and network availability. Subscription refresh
 runs when the app resumes. Check the permission and reopen Wisp after upgrades.
 
-Every registered device is targeted for a new incoming message. Own messages,
+Every registered device is targeted for a new incoming message unless that chat
+is muted in Wisp. Muting also stops pending server-side retries. A notification
+already accepted by the push provider cannot be recalled. Own messages,
 history imports, edits and reactions do not create a new message notification.
 The provider TTL is 24 hours, urgency high, and distinct messages use distinct
 tags. There is no guaranteed catch-up list: queued provider acceptance, browser

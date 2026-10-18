@@ -19,7 +19,8 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
   function renderChatList() {
     const list = $('#chatList');
     if (!list) return;
-    list.chats = state.chats;
+    list.chats = state.chats.filter(c=>!state.chatStates.get(c.id)?.closed);
+    list.chatStates = state.chatStates;
     list.selected = state.selectedChatId;
     list.filter = state.filter;
     list.searchResults = state.searchResults;
@@ -116,7 +117,7 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
       renderChatList();
       return;
     }
-    try{const result=await apiJson(`/api/search?q=${encodeURIComponent(query)}&limit=50`);if(token!==searchRequest||state.filter.trim()!==query)return;state.searchResults=result;state.searchError='';renderChatList()}catch{if(token===searchRequest){state.searchError='Could not search. Change the search or try again.';renderChatList()}}
+    try{const result=await apiJson(`/api/search?q=${encodeURIComponent(query)}&limit=50`);if(token!==searchRequest||state.filter.trim()!==query)return;state.searchResults={chats:result.chats.filter(c=>!state.chatStates.get(c.id)?.closed),messages:result.messages.filter(m=>!state.chatStates.get(m.chat_id)?.closed)};state.searchError='';renderChatList()}catch{if(token===searchRequest){state.searchError='Could not search. Change the search or try again.';renderChatList()}}
   }
 
   async function openSearchChat(chatId) {
@@ -174,7 +175,7 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
     if (globalListenersInstalled) return;
     globalListenersInstalled = true;
     document.addEventListener('keydown', event => {
-      if (event.defaultPrevented || event.target.closest?.('.image-viewer,.message-actions,.message-popover,.reaction-chips,.quoted-message,wisp-emoji-picker') || !desktop() || state.settingsOpen || state.connection.state !== 'connected') return;
+      if (document.querySelector('dialog[open]') || event.defaultPrevented || event.target.closest?.('.image-viewer,.message-actions,.message-popover,.reaction-chips,.quoted-message,wisp-emoji-picker') || !desktop() || state.settingsOpen || state.connection.state !== 'connected') return;
       const active = document.activeElement;
       const isComposer = active?.id === 'composerInput';
       const isSearch = active?.id === 'search';
@@ -216,7 +217,7 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
     });
     document.addEventListener('pointerdown', event => {
       if (!desktop() || state.settingsOpen || state.connection.state !== 'connected') return;
-      if (event.target.closest('button,input,textarea,a,[contenteditable="true"],.chat,.search-hit,.bubble,.media-tile,.link-card,.modal,.image-viewer')) return;
+      if (event.target.closest('button,input,textarea,a,[contenteditable="true"],.chat,.search-hit,.bubble,.media-tile,.link-card,.modal,.chat-controls,.image-viewer')) return;
       if (event.target.closest('.sidebar')) activateChatPane();
       else if (event.target.closest('.conversation')) activateConversationPane();
     });

@@ -461,7 +461,7 @@ func (s *Store) Search(q string, limit int) (map[string]any, error) {
 		limit = 100
 	}
 	like := "%" + q + "%"
-	cr, err := s.DB.Query(`SELECT id,name,type,last_message_at FROM chats WHERE COALESCE(name,'') LIKE ? COLLATE NOCASE ORDER BY COALESCE(last_message_at,0) DESC LIMIT ?`, like, limit)
+	cr, err := s.DB.Query(`SELECT id,name,type,last_message_at FROM chats c WHERE `+openChatSQL+` AND COALESCE(name,'') LIKE ? COLLATE NOCASE ORDER BY COALESCE(last_message_at,0) DESC LIMIT ?`, like, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -476,7 +476,7 @@ func (s *Store) Search(q string, limit int) (map[string]any, error) {
 		}
 		chats = append(chats, map[string]any{"id": id, "name": nullable(name), "type": typ, "last_message_at": nullableInt(ts)})
 	}
-	mr, err := s.DB.Query(`SELECT m.id,m.chat_id,c.name,m.body,m.timestamp FROM messages m JOIN chats c ON c.id=m.chat_id WHERE COALESCE(m.body,'') LIKE ? COLLATE NOCASE ORDER BY m.timestamp DESC LIMIT ?`, like, limit)
+	mr, err := s.DB.Query(`SELECT m.id,m.chat_id,c.name,m.body,m.timestamp FROM messages m JOIN chats c ON c.id=m.chat_id WHERE `+openChatSQL+` AND COALESCE(m.body,'') LIKE ? COLLATE NOCASE ORDER BY m.timestamp DESC LIMIT ?`, like, limit)
 	if err != nil {
 		return nil, err
 	}

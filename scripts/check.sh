@@ -25,7 +25,7 @@ cp -a public internal/webui/public
 go mod verify
 go test ./...
 go vet ./...
-CGO_ENABLED=1 go test -race ./internal/events ./internal/store ./internal/whatsapp ./internal/httpapi ./internal/pushsvc
+CGO_ENABLED=1 go test -race ./internal/events ./internal/store ./internal/whatsapp ./internal/httpapi ./internal/pushsvc ./internal/mqttsvc
 CGO_ENABLED=0 go build -buildvcs=false -trimpath -o "$backup/wisp" ./cmd/wisp
 "$backup/wisp" --version
 npm run test:browser

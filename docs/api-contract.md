@@ -132,3 +132,31 @@ same cached state when the backend check completes. Reading status or opening
 Settings does not trigger a GitHub request. Development versions are not
 comparable to stable releases. On errors, retain the last known release while
 showing that the latest check was unavailable.
+
+
+## Wisp chat visibility and mute state
+
+- `GET /api/chats` excludes closed conversations and includes `mute_until` on
+  each visible chat. `GET /api/search` excludes closed chats and their messages.
+- `GET /api/chat-options?q=...` returns stored chats (including closed ones) and
+  locally synchronized WhatsApp contacts, filtered by name or ID. Each option
+  has `id`, `name`, `type`, `closed`, `mute_until`, and `contact`. This endpoint
+  does not request the device address-book permission or create WhatsApp groups.
+- `POST /api/chats/{id}/state` accepts `{"action":"close"}`,
+  `{"action":"open"}`, or `{"action":"mute","mute_for":"8h"}`.
+  Supported durations: `8h`, `1w`, `forever`, `off` (unmute).
+  Opening accepts an existing Wisp chat or a contact known to the linked account.
+- A successful action returns and broadcasts a `chat-state` SSE object:
+  `chat_id`, `closed`, `mute_until`, `draft_revision`, `version`.
+  Deadlines use Unix seconds; `-1` means indefinite and `0` unmuted. Each close
+  increments `draft_revision`; all changes monotonically increment `version`.
+- `GET /api/status` includes `chat_states`, the current saved states, so clients
+  can invalidate stale offline drafts and recover from disconnected SSE streams.
+  Clients ignore older state versions and clear local drafts only when the
+  server's draft revision is newer than their acknowledged revision.
+- Internal `message` SSE events include `silent: true` if the chat was muted
+  when the live message was published. UI synchronization continues. Push/MQTT
+  must suppress these messages even if a queue outlives the mute deadline.
+
+These settings are stored under reserved `chat-state:` keys in the existing
+`app_config` table. Schema 150 is retained; no database reset is needed.

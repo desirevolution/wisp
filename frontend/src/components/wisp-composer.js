@@ -87,12 +87,12 @@ export class WispComposer extends LitElement {
     e.target.value='';
     if(!camera||!file){this._attachImage(file);return}
     if(this.blocked||!chat||this.draft.sending||this.draft.preparingImage)return;
-    const previousImage=this.draft.image;
+    const previousImage=this.draft.image,serverRevision=this.draft.serverRevision;
     sessionDrafts.update(chat,{preparingImage:true,error:''});
     try{
       const prepared=await prepareCameraImage(file);
-      if(this.chatId===chat&&this.draft.image===previousImage)this._attachImage(prepared);
-    }finally{sessionDrafts.update(chat,{preparingImage:false})}
+      if(this.chatId===chat&&this.draft.image===previousImage&&this.draft.serverRevision===serverRevision)this._attachImage(prepared);
+    }finally{if(sessionDrafts.get(chat).serverRevision===serverRevision)sessionDrafts.update(chat,{preparingImage:false})}
   }
   removeImage() { if (!this.draft.sending) sessionDrafts.update(this.chatId, { image: null, error: '' }); }
   async send() {

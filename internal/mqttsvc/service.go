@@ -144,7 +144,7 @@ func (s *Service) run(ch <-chan events.Event) {
 			}
 			switch e.Type {
 			case "message":
-				if m, ok := e.Data.(model.Message); ok && m.FromMe == 0 {
+				if m, ok := e.Data.(model.Message); ok && m.FromMe == 0 && !m.Silent && !s.st.ChatMuted(m.ChatID) {
 					senderName := ""
 					if m.SenderName != nil {
 						senderName = *m.SenderName
