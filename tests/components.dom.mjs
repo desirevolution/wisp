@@ -58,7 +58,24 @@ assert.ok(list.querySelector('.body').textContent.includes('Current version'));a
 assert.ok(list.querySelector('.quote-edited'));list.querySelector('.edit-toggle').click();await list.updateComplete;
 assert.ok(list.querySelector('.version-body').textContent.includes('Earlier <script>version</script>'));assert.equal(list.querySelector('script'),null);
 list.messages=[{...list.messages[0],deleted:true}];await list.updateComplete;assert.equal(list.querySelector('.edit-history'),null);
-list.remove();console.log('Message DOM: action events, all incoming emoji, remove, picker subset, toggle, escaping and mirror mode passed');
+// Image replies show the original media in both the composer and sent quote.
+document.body.append(composer);
+composer.setReply({id:'photo',type:'image',media_id:'photo/id',sender_name:'Bea',body:'A caption'});
+await composer.updateComplete;
+assert.equal(composer.querySelector('.reply-draft .quote-thumbnail').getAttribute('src'),'/api/media/photo%2Fid');
+list.messages=[{...original,id:'image-reply',body:'Nice!',reply:{message_id:'photo',type:'image',media_id:'photo/id',sender_name:'Bea',body:'A caption'}}];
+await list.updateComplete;
+const thumbnail=list.querySelector('.quoted-message .quote-thumbnail');
+assert.equal(thumbnail.getAttribute('src'),'/api/media/photo%2Fid');
+assert.ok(list.querySelector('.quoted-message').textContent.includes('A caption'));
+thumbnail.dispatchEvent(new Event('error'));assert.equal(thumbnail.hidden,true);
+thumbnail.dispatchEvent(new Event('load'));assert.equal(thumbnail.hidden,false);
+let quoted;list.addEventListener('quote-open',e=>quoted=e.detail.quote);
+list.querySelector('.quoted-message').click();assert.equal(quoted.message_id,'photo');
+list.messages=[{...list.messages[0],reply:{message_id:'missing',type:'image',sender_name:'Bea'}}];
+await list.updateComplete;assert.equal(list.querySelector('.quote-thumbnail'),null);
+assert.ok(list.querySelector('.quoted-message').textContent.includes('Image'));
+composer.remove();list.remove();console.log('Message DOM: action events, all incoming emoji, remove, picker subset, toggle, escaping and mirror mode passed');
 Object.defineProperty(globalThis,'navigator',{configurable:true,value:win.navigator});
 for(const key of ['location','history'])globalThis[key]=win[key];
 let live;

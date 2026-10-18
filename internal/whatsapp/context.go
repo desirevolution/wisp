@@ -93,7 +93,11 @@ func (s *Service) quote(ctx context.Context, chat string, msg *waE2E.Message) *m
 		}
 	}
 	body = s.mentionBody(ctx, qchat, body, messageMentionJIDs(c.GetQuotedMessage()), true)
-	return &model.Quote{MessageID: c.GetStanzaID(), ChatID: qchat, SenderID: j.String(), SenderName: name, FromMe: s.isSelf(ctx, j), Body: body, Type: kind}
+	q := &model.Quote{MessageID: c.GetStanzaID(), ChatID: qchat, SenderID: j.String(), SenderName: name, FromMe: s.isSelf(ctx, j), Body: body, Type: kind}
+	if s.store != nil {
+		s.store.DecorateQuote(q, chat)
+	}
+	return q
 }
 func (s *Service) addContext(ctx context.Context, m *model.Message, raw *waE2E.Message, chat, sender string) error {
 	var err error

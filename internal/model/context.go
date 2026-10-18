@@ -2,6 +2,7 @@ package model
 
 // Quote is a snapshot, not a requirement that the original is stored locally.
 type Quote struct {
+	MediaID        string `json:"media_id,omitempty"`
 	OriginalEdited bool   `json:"original_edited"`
 	Deleted        bool   `json:"deleted"`
 	MessageID      string `json:"message_id"`

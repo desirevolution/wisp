@@ -254,7 +254,7 @@ input:focus-visible,textarea:focus-visible{
 .message-actions button:hover,.message-actions button:focus-visible,.message-actions button:active{background:#334650;color:#fff}
 .message-actions button:disabled{opacity:.45;cursor:wait}
 @media(hover:none),(pointer:coarse){.message-actions{opacity:1}.message-actions button{width:34px;height:40px}.messages .message-row>.bubble{max-width:calc(100% - 77px)}}
-.quoted-message{display:flex;flex-direction:column;gap:3px;max-width:100%;min-width:min(140px,100%);width:100%;margin:0 0 7px;padding:8px 10px;text-align:left;border:0;border-left:3px solid #00a884;border-radius:5px;background:#0003;color:#c9d9df;cursor:pointer}
+.quoted-message{display:flex;align-items:center;gap:10px;max-width:100%;min-width:min(140px,100%);width:100%;margin:0 0 7px;padding:8px 10px;text-align:left;border:0;border-left:3px solid #00a884;border-radius:5px;background:#0003;color:#c9d9df;cursor:pointer}
 .quoted-message b,.reply-draft b{font-size:12px;color:#7bd6c1}
 .quoted-message span{font-size:13px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere;white-space:pre-wrap}
 .reply-draft{display:flex;align-items:center;gap:12px;border-left:3px solid #00a884;padding:8px 10px;margin-bottom:8px;background:#111b21;border-radius:5px}
@@ -338,8 +338,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible,
 .app.pane-left .sidebar-top,.app.pane-right .conversation-top{box-shadow:inset 0 -1px 0 #6b8a96}
 .chat.keyboard-selected,.search-hit.keyboard-selected{outline:1px solid var(--focus);outline-offset:-2px}
 .messages{padding:18px 5%;line-height:1.4}
-.conversation{grid-template-columns:minmax(0,1fr)}
-.conversation> .top,.conversation>#messages,.conversation>#gallery,.conversation>#composer,.conversation>#imageViewer,.conversation>#connectionView{grid-column:1}
 .conversation> .top{grid-row:1}
 .conversation> .messages,.conversation>wisp-connection{grid-row:2;grid-column:1}
 wisp-composer{display:block;grid-row:3;min-width:0}
@@ -434,3 +432,7 @@ wisp-composer{display:block;grid-row:3;min-width:0}
 .media-ready>.media-frame-status{visibility:hidden}
 .media-frame.failed{padding:0}
 .media-frame.failed .retry-media{justify-self:center;min-height:44px}
+
+.quote-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.quote-thumbnail{width:52px;height:52px;flex:0 0 52px;object-fit:cover;border-radius:4px;background:#111b21}
+.quote-thumbnail[hidden]{display:none}

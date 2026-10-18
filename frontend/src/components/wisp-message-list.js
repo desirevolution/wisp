@@ -1,3 +1,4 @@
+import { replyThumbnail } from '../lib/reply-thumbnail.js';
 import { LitElement, html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { sameMessageGroup } from '../core/message-groups.js';
@@ -147,7 +148,7 @@ export class WispMessageList extends LitElement {
   quote(q,key){
     const open=this.expanded.has(key);
     return html`${q.deleted?html`<button class="deleted-toggle" aria-expanded=${open} @click=${()=>this.toggleDeleted(key)}>${open?'Hide deleted quote':'Show deleted quote'}</button>`:null}
-      ${!q.deleted||open?html`<button type="button" class="quoted-message" aria-label="Open original message" @click=${()=>this.emit('quote-open',{quote:q})}><b>${q.from_me?'You':q.sender_name||'Unknown sender'}</b><span>${q.body||mediaLabel(q.type)}</span>${q.original_edited?html`<small class="quote-edited">Original edited since this reply</small>`:null}</button>`:null}`;
+      ${!q.deleted||open?html`<button type="button" class="quoted-message" aria-label="Open original message" @click=${()=>this.emit('quote-open',{quote:q})}><div class="quote-copy"><b>${q.from_me?'You':q.sender_name||'Unknown sender'}</b><span>${q.body||mediaLabel(q.type)}</span>${q.original_edited?html`<small class="quote-edited">Original edited since this reply</small>`:null}</div>${replyThumbnail(q)}</button>`:null}`;
   }
   editHistory(m){
     if(!m.edited)return null;

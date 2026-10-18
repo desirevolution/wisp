@@ -119,3 +119,50 @@ func TestRejectOldApplicationSchemaWithoutMigration(t *testing.T) {
 		t.Fatal("incompatible database was accepted")
 	}
 }
+
+func TestImageReplyPreviewForExistingSnapshots(t *testing.T) {
+	s := contextStore(t)
+	photo := model.Message{ID: "photo", WhatsAppID: "photo", ChatID: "g@g.us", Type: "image", HasMedia: 1}
+	reply := model.Message{ID: "answer", WhatsAppID: "answer", ChatID: photo.ChatID, Type: "chat", Body: "Nice!", Reply: &model.Quote{MessageID: photo.ID, Type: "image"}}
+	for _, m := range []model.Message{photo, reply} {
+		if _, err := s.Save(m, "Group", "group"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.MessageByID(reply.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Reply.MediaID != photo.ID {
+		t.Fatalf("missing preview: %#v", got.Reply)
+	}
+	rows, err := s.Messages(photo.ChatID, 50, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.EnrichMessageRows(context.Background(), rows); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, row := range rows {
+		if row["id"] == reply.ID {
+			found = true
+			if row["reply"].(*model.Quote).MediaID != photo.ID {
+				t.Fatal("list preview missing")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("reply not returned")
+	}
+	for _, q := range []*model.Quote{
+		{MessageID: photo.ID, ChatID: "other@g.us", Type: "image", MediaID: "stale"},
+		{MessageID: "missing", Type: "image", MediaID: "stale"},
+		{MessageID: photo.ID, Type: "chat", MediaID: "stale"},
+	} {
+		s.DecorateQuote(q, photo.ChatID)
+		if q.MediaID != "" {
+			t.Fatalf("invalid preview: %#v", q)
+		}
+	}
+}

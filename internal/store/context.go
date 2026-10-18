@@ -20,6 +20,7 @@ func (s *Store) LoadMessageContext(m *model.Message) error {
 	if err := json.Unmarshal([]byte(raw), &m.Reply); err != nil {
 		return err
 	}
+	s.DecorateQuote(m.Reply, m.ChatID)
 	return s.DecorateEdit(m)
 }
 
@@ -104,7 +105,7 @@ func (s *Store) EnrichMessageRows(ctx context.Context, rows []map[string]any) er
 			if err := json.Unmarshal([]byte(raw), &q); err != nil {
 				return err
 			}
-			q.Deleted = s.IsDeleted(q.ChatID, q.MessageID)
+			s.DecorateQuote(&q, chat)
 			row["reply"] = &q
 		}
 		state, err := s.ReactionState(ctx, chat, id)
@@ -178,4 +179,25 @@ func (s *Store) MergeReactor(chat, id, alias, canonical string) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// Resolve from current media rows so old reply snapshots also gain previews.
+// The snapshot remains useful when the original is not stored on this device.
+func (s *Store) DecorateQuote(q *model.Quote, chat string) {
+	if q == nil {
+		return
+	}
+	q.MediaID = ""
+	qchat := q.ChatID
+	if qchat == "" {
+		qchat = chat
+	}
+	q.Deleted = s.IsDeleted(qchat, q.MessageID)
+	if q.Type != "image" && q.Type != "sticker" {
+		return
+	}
+	media, err := s.MediaByMessage(q.MessageID)
+	if err == nil && media.ChatID == qchat && (media.Type == "image" || media.Type == "sticker") {
+		q.MediaID = media.ID
+	}
 }

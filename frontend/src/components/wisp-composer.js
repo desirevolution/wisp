@@ -1,3 +1,4 @@
+import { replyThumbnail } from '../lib/reply-thumbnail.js';
 import { LitElement, html } from 'lit';
 import { icon } from '../lib/icons.js';
 import { live } from 'lit/directives/live.js';
@@ -32,7 +33,7 @@ export class WispComposer extends LitElement {
   focusInput() { if(this.blocked)return;this.input?.focus({ preventScroll: true }); }
   setReply(message) {
     if (!this.chatId || this.draft.sending) return;
-    sessionDrafts.update(this.chatId, { reply: { message_id: message.id, sender_name: message.from_me ? 'You' : (message.sender_name || 'Unknown sender'), body: message.body, type: message.type }, error: '' });
+    sessionDrafts.update(this.chatId, { reply: { message_id: message.id, sender_name: message.from_me ? 'You' : (message.sender_name || 'Unknown sender'), body: message.body, type: message.type, media_id: message.media_id }, error: '' });
     this.updateComplete.then(() => this.focusInput());
   }
   cancelReply() { if (!this.draft.sending) sessionDrafts.update(this.chatId, { reply: null }); }
@@ -128,7 +129,7 @@ export class WispComposer extends LitElement {
     return html`<div class="composer-wrap">
       ${d.image ? html`<div class="image-draft"><img src=${d.image.url} alt="Image to send"><div><b>${d.sending?'Sending image…':'Image ready to send'}</b><small>${(d.image.file.size / 1024 / 1024).toFixed(1)} MiB · PNG/JPEG · max. 10 MiB</small></div><button type="button" aria-label="Remove image" title="Remove image" ?disabled=${d.sending || this.blocked} @click=${this.removeImage}>${icon('close')}</button></div>` : null}
       ${d.preparingImage||d.sending?html`<div class="send-progress" role="status"><span class="sync-spinner" aria-hidden="true"></span>${d.preparingImage?'Preparing photo…':d.image?'Sending image… Uploading and waiting for WhatsApp confirmation.':'Sending message…'}</div>`:null}
-      ${d.reply ? html`<div class="reply-draft"><div><b>Reply to ${d.reply.sender_name}</b><span>${d.reply.body || mediaLabel(d.reply.type)}</span></div><button type="button" aria-label="Cancel reply" title="Cancel reply (Escape)" ?disabled=${d.sending || this.blocked} @click=${this.cancelReply}>${icon('close')}</button></div>` : null}
+      ${d.reply ? html`<div class="reply-draft"><div><b>Reply to ${d.reply.sender_name}</b><span>${d.reply.body || mediaLabel(d.reply.type)}</span></div>${replyThumbnail(d.reply)}<button type="button" aria-label="Cancel reply" title="Cancel reply (Escape)" ?disabled=${d.sending || this.blocked} @click=${this.cancelReply}>${icon('close')}</button></div>` : null}
       <div id="emojiPicker" class="emoji-picker" ?hidden=${!this.pickerOpen}>
         <wisp-emoji-picker @emoji-pick=${e => this._insertEmoji(e.detail.emoji)} @picker-close=${() => { this.closePicker(); this.focusInput(); }}></wisp-emoji-picker>
       </div>

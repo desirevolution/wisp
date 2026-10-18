@@ -219,14 +219,3 @@ Based on the new uploaded `wisp-main(8).zip`.
   page collapses the image history layer, so the next Back goes to the overview
   and a further Back reaches the previous external page.
 - Physical Android installed-PWA behavior remains a device smoke test.
-
-## Image-dependent right gap
-
-- Production build, 31 unit tests, all four DOM suites and the complete
-  desktop/mobile Chromium regression pass. No backend changes.
-- Regression checks compare image-page/header widths to the conversation pane
-  for portrait (200x800), landscape (1600x400) and square (600x600) images at
-  390px and 1200px viewports. Measurements use one layout snapshot after resize
-  settles, avoiding mixed pre/post sidebar-resize bounds.
-- A synthetic image-page screenshot was visually inspected: the header reaches
-  the full right edge and the image is centered within the right pane.

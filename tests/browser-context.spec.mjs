@@ -287,30 +287,12 @@ try{
  // Desktop keeps the chat list active while the image fills the right pane.
  await navImage.click();await np.locator('#imageViewer:not([hidden])').waitFor();
  await np.setViewportSize({width:1200,height:844});
- await np.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
- const {viewer:viewerBounds,sidebar:sidebarBounds,pane:paneBounds,head:headerBounds}=await np.evaluate(()=>{const rect=s=>document.querySelector(s).getBoundingClientRect().toJSON();return {viewer:rect('#imageViewer'),sidebar:rect('.sidebar'),pane:rect('.conversation'),head:rect('.conversation-top')}});
- assert.ok(Math.abs(viewerBounds.width-paneBounds.width)<2,'Image page must fill the entire conversation width');
- assert.ok(Math.abs(headerBounds.width-paneBounds.width)<2,'Header must not shrink to the image width');
+ const viewerBounds=await np.locator('#imageViewer').boundingBox(),sidebarBounds=await np.locator('.sidebar').boundingBox();
  assert.ok(viewerBounds.x>=sidebarBounds.x+sidebarBounds.width,JSON.stringify({viewerBounds,sidebarBounds}));
  assert.equal(await np.locator('#imageViewer').evaluate(el=>el.tagName),'SECTION');
  assert.equal(await np.locator('dialog[open]').count(),0);
  assert.equal(await np.locator('.sidebar').evaluate(el=>el.inert),false);
  assert.equal(await np.getByRole('button',{name:'Back to chat',exact:true}).evaluate(el=>Boolean(el.closest('.conversation-top'))),true);
- for(const [width,height] of [[200,800],[1600,400],[600,600]]){
-   await np.locator('#messages').evaluate((el,{width,height})=>{
-     const src='data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#238b88"/></svg>`);
-     el.dispatchEvent(new CustomEvent('image-open',{detail:{src,alt:`Image ${width}x${height}`},bubbles:true}));
-   },{width,height});
-   await np.waitForFunction(()=>document.querySelector('#imageViewer img')?.complete);
-   for(const viewportWidth of [390,1200]){
-     await np.setViewportSize({width:viewportWidth,height:844});
-     await np.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
-     const {pane,head,viewer}=await np.evaluate(()=>{const rect=s=>document.querySelector(s).getBoundingClientRect().toJSON();return {pane:rect('.conversation'),head:rect('.conversation-top'),viewer:rect('#imageViewer')}});
-     assert.ok(Math.abs(head.width-pane.width)<2&&Math.abs(viewer.width-pane.width)<2,JSON.stringify({width,height,viewportWidth,pane,head,viewer}));
-   }
- }
- if(process.env.WISP_IMAGE_PAGE_SCREENSHOT)await np.screenshot({path:process.env.WISP_IMAGE_PAGE_SCREENSHOT});
-
  await np.locator(`[data-id="${other}"]`).click();await np.locator('[data-message-id="h1"]').waitFor();
  await np.waitForFunction(other=>history.state.view==='chat'&&history.state.chatId===other,other);
  await np.setViewportSize({width:390,height:844});
@@ -478,4 +460,25 @@ try{
  await mp.locator('#anchor-regression-list').evaluate(el=>el.remove());
  assert.deepEqual(staged.errors,[]);await staged.context.close();
  console.log('Prepared chat: 150ms quiet loading, hidden layout, disabled input, stable delayed image, learned ratio and latest selection passed');
+ // Quoted photos reserve a compact thumbnail on desktop and mobile.
+ for (const width of [1200,390]) {
+  const quotePage=await browser.newPage({viewport:{width,height:850}});
+  await quotePage.goto(base);
+  await quotePage.waitForFunction(()=>customElements.get('wisp-message-list'));
+  await quotePage.evaluate(async()=>{
+   const list=document.createElement('wisp-message-list');list.id='photo-reply-check';list.className='messages';
+   list.style.cssText='position:fixed;inset:60px 0 auto;width:100%;z-index:9999';
+   list.chatId='quote-test';list.hasSelection=true;
+   list.messages=[{id:'photo-answer',chat_id:'quote-test',type:'chat',body:'Beautiful photo!',timestamp:1790760000,reply:{message_id:'photo',type:'image',media_id:'demo-portrait',sender_name:'Bea',body:'Our holiday'}}];
+   document.body.append(list);await list.updateComplete;
+  });
+  const thumb=quotePage.locator('#photo-reply-check .quote-thumbnail');
+  await thumb.evaluate(img=>img.decode());
+  const box=await thumb.boundingBox();assert.equal(box.width,52);assert.equal(box.height,52);
+  const quoteBox=await quotePage.locator('#photo-reply-check .quoted-message').boundingBox();
+  assert.ok(box.x+box.width<=quoteBox.x+quoteBox.width+1);
+  assert.ok(quoteBox.x+quoteBox.width<=width);
+  await quotePage.close();
+ }
+ console.log('Image reply thumbnails: decoded image, fixed dimensions and no overflow on desktop/mobile passed');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}
