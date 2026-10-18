@@ -15,7 +15,8 @@ A lightweight, self-hosted WhatsApp companion with a responsive web UI, messagin
   remains available.
 - Show received reactions, edits and deletion markers, including stored context.
 - Receive live SSE updates, install the PWA and optionally enable per-device Web Push.
-- Publish incoming messages to MQTT; optionally run as a read-only mirror.
+- Publish incoming messages to MQTT
+- Optionally run as a read-only mirror.
 
 One WhatsApp account per installation. Authentication belongs to your reverse
 proxy; Wisp has no built-in login or user permissions.
