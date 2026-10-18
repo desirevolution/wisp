@@ -15,6 +15,7 @@ const messages = [
 const server = createServer(async (req,res) => {
  const url=new URL(req.url,'http://local');
  const json=(data,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data))};
+ if(url.pathname==='/outside-wisp'){res.writeHead(200,{'content-type':'text/html'});res.end('<h1>Outside Wisp</h1>');return}
  if(url.pathname==='/api/media/demo-portrait'){res.writeHead(200,{'content-type':'image/svg+xml'});res.end('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="800"><rect width="200" height="800" fill="#238b88"/></svg>');return}
  if(url.pathname==='/api/status')return json({whatsapp:{state:'connected'},send:{enabled:!mirror}});
  if(url.pathname==='/api/config')return json({sendEnabled:!mirror,mirrorOnly:mirror,followNewMessages:false});
@@ -49,10 +50,11 @@ const server = createServer(async (req,res) => {
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 let browser;
 const base=`http://127.0.0.1:${server.address().port}`;
-async function pageFor(options){
+async function pageFor(options,{previous=false}={}){
  const context=await browser.newContext({serviceWorkers:'block',...options});
  await context.addInitScript(()=>{window.EventSource=class extends EventTarget{constructor(){super();window.testEvents=this;setTimeout(()=>this.dispatchEvent(new Event('open')),20)}close(){}}});
  const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ if(previous)await page.goto(base+'/outside-wisp');
  await page.goto(base);await page.evaluate(()=>window.startHistoryLength=history.length);await page.locator(`[data-id="${chat}"]`).click();await page.locator(switchRows?'[data-message-id="g@g.us-59"]':'[data-message-id="m1"]').waitFor();return {context,page,errors};
 }
 try{
@@ -119,7 +121,7 @@ try{
  await page.reload();await page.locator('#sidebarResize').waitFor();
  assert.equal(await page.locator('.sidebar').evaluate(el=>Math.round(el.getBoundingClientRect().width)),sidebarWidth);
  const initialHistoryLength=await page.evaluate(()=>history.length);
- // Back always returns to the chat selection; internal actions add no history.
+ // Back always returns to the chat selection; chat switches share one history entry.
  await page.locator('#search').fill('Treffen');await page.locator('.search-hit').waitFor();
  await page.locator('.search-hit').click();await page.locator('[data-message-id="m1"]').waitFor();
  assert.equal(await page.locator('#search').inputValue(),'');
@@ -235,7 +237,8 @@ try{
  await mobile.page.locator('#composerInput').fill('Mobile line\n');
  await mr.getByRole('button',{name:'Message actions',exact:true}).click();await mobile.page.locator('.message-popover').waitFor();
  await mobile.page.locator('.message-sheet').getByRole('button',{name:'Close',exact:true}).click();await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));
- assert.equal(await mobile.page.evaluate(()=>history.length),await mobile.page.evaluate(()=>window.startHistoryLength));
+ assert.equal(await mobile.page.evaluate(()=>history.length),await mobile.page.evaluate(()=>window.startHistoryLength)+1);
+ assert.equal(await mobile.page.evaluate(()=>history.state.view),'chat');
  assert.equal(await mobile.page.locator('#composerInput').inputValue(),'Mobile line\n');
  await mobile.page.locator('#composerInput').fill('');await mobile.page.locator('#composerInput').blur();
  if(process.env.WISP_SCREENSHOT)await mobile.page.screenshot({path:process.env.WISP_SCREENSHOT});
@@ -250,6 +253,40 @@ try{
  mirror=true;const readonly=await pageFor({viewport:{width:1100,height:800}});assert.equal(await readonly.page.locator('.message-actions').count(),0);assert.equal(await readonly.page.locator('#composer').isVisible(),false);await readonly.context.close();console.log('Mirror mode: send actions hidden');
 
  }
+ // Browser/PWA navigation: overview -> chat -> image, without raw-media
+ // navigation or accumulating an entry for every chat switch.
+ switchRows=false;mirror=false;
+ const nav=await pageFor({viewport:{width:1200,height:844},isMobile:true,hasTouch:true},{previous:true});
+ const np=nav.page,navLength=await np.evaluate(()=>history.length);
+ const navPhoto={id:'nav-photo',chat_id:chat,type:'image',body:'Navigation portrait',has_media:1,media_id:'demo-portrait',media_status:'ready',media_width:200,media_height:800,timestamp:1790760060,from_me:0,reactions:[]};
+ await np.route('**/api/chats/g%40g.us/messages?limit=50',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([...messages,navPhoto])}));
+ await np.reload();await np.locator('[data-message-id="nav-photo"]').waitFor();
+ assert.equal(await np.evaluate(()=>history.length),navLength,'Chat reload must not add another history entry');
+ await np.locator(`[data-id="${other}"]`).click();await np.locator('[data-message-id="h1"]').waitFor();
+ assert.equal(await np.evaluate(()=>history.length),navLength,'Chat switches replace the chat history entry');
+ await np.setViewportSize({width:390,height:844});
+ await np.goBack();await np.waitForFunction(()=>history.state.view==='overview'&&!document.querySelector('#app').classList.contains('open'));await np.locator('.sidebar').waitFor();
+ await np.goForward();await np.locator('[data-message-id="h1"]').waitFor();
+ await np.goBack();await np.waitForFunction(()=>history.state.view==='overview'&&!document.querySelector('#app').classList.contains('open'));await np.locator('.sidebar').waitFor();
+ await np.locator(`[data-id="${chat}"]`).click();await np.locator('[data-message-id="nav-photo"]').waitFor();
+ const navImage=np.locator('[data-message-id="nav-photo"] .media-frame');
+ await navImage.click();await np.locator('#imageViewer[open]').waitFor();
+ assert.equal(nav.context.pages().length,1,'An image must not open a new browser/PWA tab');
+ assert.equal(np.url(),base+'/','Image viewing must stay inside Wisp');
+ assert.equal(await np.evaluate(()=>history.state.view),'image');
+ await np.reload();await np.locator('#imageViewer[open]').waitFor();
+ await np.goBack();await np.waitForFunction(()=>!document.querySelector('#imageViewer').open);
+ assert.equal(await np.locator('#conversationTitle').textContent(),'Gruppe');
+ await np.goForward();await np.locator('#imageViewer[open]').waitFor();
+ await np.getByRole('button',{name:'Back to chat',exact:true}).click();
+ await np.waitForFunction(()=>!document.querySelector('#imageViewer').open);
+ await navImage.click();await np.locator('#imageViewer[open]').waitFor();
+ await np.locator('#imageViewer').press('Escape');await np.waitForFunction(()=>!document.querySelector('#imageViewer').open);
+ await np.goBack();await np.waitForFunction(()=>history.state.view==='overview'&&!document.querySelector('#app').classList.contains('open'));await np.locator('.sidebar').waitFor();
+ await np.goBack();await np.getByRole('heading',{name:'Outside Wisp'}).waitFor();
+ assert.deepEqual(nav.errors,[]);await nav.context.close();
+ console.log('Browser/PWA Back: image -> chat -> overview -> previous site; Forward, reload, close/Escape and single chat entry passed');
+
  // Cached chat refresh must preserve the position reached while the request is pending.
  mirror=false;switchRows=true;
  const switching=await pageFor({viewport:{width:1200,height:850}});

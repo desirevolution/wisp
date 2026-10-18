@@ -174,7 +174,7 @@ export function createNavigation({ app, store, selectChat, openMessage, focusCom
     if (globalListenersInstalled) return;
     globalListenersInstalled = true;
     document.addEventListener('keydown', event => {
-      if (event.defaultPrevented || event.target.closest?.('.message-actions,.message-popover,.reaction-chips,.quoted-message,wisp-emoji-picker') || !desktop() || state.settingsOpen || state.connection.state !== 'connected') return;
+      if (event.defaultPrevented || event.target.closest?.('.image-viewer,.message-actions,.message-popover,.reaction-chips,.quoted-message,wisp-emoji-picker') || !desktop() || state.settingsOpen || state.connection.state !== 'connected') return;
       const active = document.activeElement;
       const isComposer = active?.id === 'composerInput';
       const isSearch = active?.id === 'search';

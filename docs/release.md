@@ -83,3 +83,7 @@ this source package.
   version reporting comes from the embedded Go build version.
 - Smoke-test the daily update hint against a newer stable release. Drafts,
   prereleases and invalid release metadata must not produce an update hint.
+
+Windows release binaries now wait for a native `windows-latest` job to run the
+embedded asset routing regression (root HTML, JavaScript asset and SPA fallback).
+This catches platform-specific URL/filesystem path regressions before upload.

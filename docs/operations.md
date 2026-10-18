@@ -108,3 +108,19 @@ or error details; review logs before sharing them and keep debug logging disable
 receipt or OS display. `expired` means the dead endpoint is removed. `failed`
 shows HTTP status, attempt, duration and whether a network error occurred;
 `retry_stopped` explains a provider rate-limit wait beyond the bounded retry window.
+
+## Windows binary and the web root
+
+The executable serves the embedded frontend; no adjacent frontend folder is
+required. A fresh request should return HTTP 200 and HTML:
+
+```powershell
+curl.exe -i http://127.0.0.1:8080/
+```
+
+Older builds could fail embedded asset lookup on Windows by treating URL paths
+as native filesystem paths, then redirect repeatedly to `./`. The current build
+uses URL path rules on all operating systems and a non-redirecting SPA fallback.
+An actual 304 response is conditional-cache validation; it differs from a 301/302
+redirect with a Location header. Keep the full response headers when diagnosing
+a remaining problem.

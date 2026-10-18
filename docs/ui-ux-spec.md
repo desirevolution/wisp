@@ -24,7 +24,7 @@ Status: agreed scope, 17 October 2026. Existing Go API and WhatsApp transport st
 - While reading older messages, preserve position on incoming messages and show a count/jump button. Incoming messages in other chats only add the existing unread marker (no in-app preview banner). Dedicated mirror follow mode remains available.
 - Connection loss pauses interaction and displays the existing connection screen. Preserve loaded conversation position and drafts until reconnected; do not add an offline outbox.
 - Opening a search result opens its chat/context. The in-app Back button returns to the chat selection, without restoring the search. Guard against stale search responses.
-- The in-app Back button always returns to chat selection. No internal history or popstate handler is used; browser/Android Back retains normal browser behavior. Escape/outside click closes desktop reaction popovers without a Close icon; mobile sheets keep their Close button.
+- The in-app Back button always returns to chat selection. Browser/Android Back closes an open image viewer, then returns from chat to selection; another Back from selection leaves via normal browser history. Chat switches replace the single chat entry. Escape/outside click closes desktop reaction popovers without a Close icon; mobile sheets keep their Close button.
 
 - On chat selection, show a quiet loading surface for at least 150 ms once visible. Build the target list with its real layout dimensions while hidden; set the final reading position before revealing. Disable composing/actions until ready. The most recent selection wins.
 - Use cached content without waiting for the server refresh. Apply fresh server data in place afterwards while retaining the live reading anchor.
@@ -44,7 +44,7 @@ Use Lit 3 and the existing store/services; no framework migration. Replace shell
 6. Mobile Enter adds a newline; desktop Enter sends; Shift+Enter adds newline. Composition Enter does not send. Long input stops growing at five lines.
 7. Drag/keyboard resize persists and is bounded; resizing the window cannot hide the conversation. Mobile is unaffected.
 8. Search -> result -> in-app Back returns to the complete chat selection. Rapid queries cannot display older results. Search errors have an inline retry message.
-9. In-app Back returns to the chat selection from both gallery and chat. Menus/settings create no browser history entries. Browser Back is not intercepted.
+9. In-app Back returns to chat selection from gallery/chat. Menus/settings add no history entries. Browser Back returns image -> chat -> selection -> previous site/app. Forward and reload restore chat/image state without adding extra chat entries.
 10. Incoming messages do not move an older reading position; their count appears. Another chat gets an unread badge, without an incoming preview toast.
 11. A cached or uncached switch exposes no unpositioned messages. Loading remains visible >=150 ms, input stays disabled until reveal, and stale preparations cannot reveal over the latest choice. Search/deep-link context opening uses the same preparation.
 12. A delayed portrait image reveals in a reserved frame without blocking the chat. Known dimensions remain stable across loading/failed/ready states. Missing dimensions resolve once after decode with the reading position preserved, then remain stable; later chat visits use learned dimensions immediately.
@@ -84,3 +84,6 @@ scroll.
 Settings show the embedded version, last release-check time and an available
 stable update link. A small in-app update notice links to the same release.
 Live update events refresh the notice without reloading the conversation.
+
+Chat images/stickers use a native modal image viewer inside Wisp with an explicit
+Back to chat control. Retain the underlying chat DOM and reading position.

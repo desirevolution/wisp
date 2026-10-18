@@ -45,6 +45,21 @@ proxy; Wisp has no built-in login or user permissions.
   <sub><b>Mobile</b></sub>
 </p>
 
+## Chat presentation
+
+Chat changes use a quiet loading surface for at least 150 ms while the next
+conversation is laid out and positioned out of view. The composer is disabled
+until the chat is ready. Cached messages can be shown without waiting for the
+server refresh; the latest selected chat wins during rapid switching.
+
+Image/video previews reserve their original aspect ratio before downloading, using
+retained WhatsApp dimensions for both new and existing messages. Small images are
+not enlarged. Only missing dimensions use a fixed 3:2 frame; the complete image
+fits inside without cropping. Downloaded dimensions are remembered for later chat visits within the current browser
+session. If dimensions were missing, the temporary frame adjusts once after decoding
+while preserving the reading anchor or the bottom position. Known frames remain
+stable. Draft previews also follow the image aspect ratio.
+
 ## Docker quick start
 
 From the extracted project directory:
@@ -198,3 +213,15 @@ linker option is `-ldflags="-X wisp/internal/appconfig.Version=v1.2.3"`.
 
 After a successful own image send, the chat follows the uploaded image, including
 late media layout. Delayed sends do not move another chat's reading position.
+
+## Back navigation and image viewing
+
+Opening a chat adds one browser history entry above the chat overview. Switching
+between chats replaces that entry: Browser/Android Back returns to the overview,
+and Back again uses normal browser/PWA navigation to leave Wisp. The in-app Back
+button also returns to the overview. Browser Forward restores the selected chat.
+
+Chat images and stickers open in Wisp's image viewer, including in the installed
+PWA. Use Back to chat, Close, Escape or Browser Back to return to the same chat;
+images no longer navigate the PWA to a raw media endpoint or open a separate tab.
+The viewer and selected chat can also be restored after a reload.

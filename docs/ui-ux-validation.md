@@ -186,3 +186,23 @@ Based on the new uploaded `wisp-main(8).zip`.
 - Docker builds and actual GitHub release publishing were not executed here.
   Update transport is tested with local mock HTTP servers; live GitHub timing
   and real Android/WhatsApp delivery remain device/integration checks.
+
+## Browser Back, image viewer and Windows routing follow-up
+
+- 31 unit tests, all four DOM suites, production frontend build and full
+  Chromium desktop/mobile suite pass.
+- Browser regression covers a single replaced chat history entry, Back to the
+  overview, another Back to a previous external page, Forward, chat reload and
+  image-viewer reload. Images stay on the Wisp URL and open no new tab.
+- The image viewer closes through Browser Back, Back to chat and Escape while
+  preserving the underlying selected chat. Real installed-PWA Android back
+  behavior still requires a physical-device check.
+- All Go packages pass `go test ./...`; `go vet ./...` passes. Static asset
+  regressions assert HTTP 200 without Location on /, JavaScript assets and SPA
+  fallback paths, and verify the original request URL is unchanged.
+- A Windows amd64 executable cross-compiles successfully as a PE32+ binary.
+  This environment does not execute Windows programs. A new Windows CI smoke
+  job runs the targeted routing regression natively and gates binary publishing.
+- Existing upload follow, update/version, media-frame, reply/reaction and
+  position-preservation browser checks continue to pass.
+- The HTTP API race suite also passes (`go test -race ./internal/httpapi`).

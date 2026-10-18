@@ -122,3 +122,16 @@ Embed GitHub release tags into both Docker images and binaries. Show the running
 version in Settings and `--version`; development builds remain identifiable.
 Add cached, persistent backend release checks every 24 hours with semantic version
 comparison, bounded HTTP requests, failure handling and a live app notice.
+
+## Browser Back, PWA images and Windows embedded assets
+
+Restore a bounded browser history: one chat entry above the overview, replaced
+on chat switches. Back from the overview leaves Wisp normally. Add a modal image
+viewer inside the app with Back/Close/Escape and its own history layer, preserving
+the chat. Forward and reload restore chat/image state. This supersedes the earlier
+choice to avoid application browser-history entries.
+
+Use platform-independent URL path cleanup for embedded assets. Windows filesystem
+cleanup introduced backslashes and failed embedded-FS lookup; the old SPA fallback
+to `/index.html` could then produce a `./` redirect loop. Serve fallback requests
+through the root on a cloned request instead.

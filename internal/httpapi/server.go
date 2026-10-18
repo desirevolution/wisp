@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -651,15 +652,18 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, filepath.Join(s.public, "index.html"))
 		return
 	}
-	path := strings.TrimPrefix(filepath.Clean(r.URL.Path), "/")
-	if path == "." || path == "" {
-		path = "index.html"
+	assetPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+	if assetPath == "." || assetPath == "" {
+		assetPath = "index.html"
 	}
-	if f, err := s.assets.Open(path); err == nil {
+	if f, err := s.assets.Open(assetPath); err == nil {
 		f.Close()
 		http.FileServer(http.FS(s.assets)).ServeHTTP(w, r)
 		return
 	}
-	r.URL.Path = "/index.html"
-	http.FileServer(http.FS(s.assets)).ServeHTTP(w, r)
+	// FileServer redirects /index.html to ./; serve the root for SPA fallbacks.
+	// Work on a clone so the original request is not modified.
+	fallback := r.Clone(r.Context())
+	fallback.URL.Path = "/"
+	http.FileServer(http.FS(s.assets)).ServeHTTP(w, fallback)
 }
