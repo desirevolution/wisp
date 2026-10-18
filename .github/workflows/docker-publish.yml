@@ -177,8 +177,25 @@ jobs:
           first_tag="$(printf '%s\n' "$TAGS" | head -n 1)"
           docker buildx imagetools inspect "$first_tag"
           
+  windows-http-smoke:
+    name: Verify embedded assets on Windows
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test Windows embedded asset routing
+        run: go test ./internal/httpapi -run TestEmbeddedAssetsAndSPAFallbackDoNotRedirect -count=1
+
   release-binaries:
     name: Build release binaries
+    needs: windows-http-smoke
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
 
