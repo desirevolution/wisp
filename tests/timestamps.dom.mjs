@@ -34,6 +34,17 @@ assert.equal(getComputedStyle(list.querySelector('.inline-time')).fontSize,'12px
 assert.equal(list.querySelectorAll('[data-message-id="link"] .msg-link').length,1);
 assert.ok(list.querySelector('[data-message-id="image-only"]').classList.contains('media-only'));
 assert.equal(getComputedStyle(list.querySelector('[data-message-id="image-only"]>time')).position,'absolute');
+// Reactions live outside the bubble and must not change the image timestamp.
+for (const reactions of [[{emoji:'👍',actor_id:'me',from_me:true}], [{emoji:'❤️',actor_id:'other'}], []]) {
+ list.messages=list.messages.map(m=>m.id==='image-only'?{...m,reactions}:m);
+ await list.updateComplete;
+ const bubble=list.querySelector('[data-message-id="image-only"]');
+ assert.ok(bubble.classList.contains('media-only'));
+ assert.equal(bubble.querySelectorAll('time').length,1);
+ assert.equal(getComputedStyle(bubble.querySelector('time')).position,'absolute');
+ assert.equal(bubble.querySelector('.reaction-chips'),null);
+ assert.equal(bubble.parentElement.querySelectorAll('.reaction-chips').length,reactions.length?1:0);
+}
 list.toggleDeleted('deleted');list.toggleDeleted('edits:edited');await list.updateComplete;
 assert.equal(list.querySelectorAll('[data-message-id="deleted"] time').length,1);assert.ok(list.querySelector('[data-message-id="deleted"] .inline-time'));
 assert.ok(list.querySelector('[data-message-id="edited"] .edit-history').textContent.includes('Old version'));assert.equal(list.querySelectorAll('[data-message-id="edited"] time').length,1);

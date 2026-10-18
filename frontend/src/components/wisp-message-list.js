@@ -180,7 +180,7 @@ export class WispMessageList extends LitElement {
         const inlineTime=Boolean(m.body)&&(!m.deleted||this.expanded.has(m.id));
         return html`${showDay?html`<div class="date-separator"><span>${dayLabel(m.timestamp)}</span></div>`:null}
           <div class="message-row ${m.from_me?'outgoing':''} ${grouped?'grouped':'group-start'}">
-            <div class="message-stack"><div class="bubble ${m.from_me?'me':''} ${m.has_media?'media-bubble':''} ${!m.deleted&&!m.edited&&m.has_media&&!m.body&&!m.reply&&!m.reactions?.length?'media-only':''}" data-message-id=${m.id}>
+            <div class="message-stack"><div class="bubble ${m.from_me?'me':''} ${m.has_media?'media-bubble':''} ${!m.deleted&&!m.edited&&m.has_media&&!m.body&&!m.reply?'media-only':''}" data-message-id=${m.id}>
               ${this.isGroup&&!grouped&&!m.from_me&&m.sender_name&&!rawId(m.sender_name)?html`<div class="sender">${m.sender_name}</div>`:null}
               ${m.deleted?html`<div class="deleted-label">Message deleted</div>${m.type!=='deleted'?html`<button class="deleted-toggle" aria-expanded=${this.expanded.has(m.id)} @click=${()=>this.toggleDeleted(m.id)}>${this.expanded.has(m.id)?'Hide deleted message':'Show deleted message'}</button>`:null}`:null}
               ${!m.deleted||this.expanded.has(m.id)?html`${m.reply?this.quote(m.reply,`quote:${m.id}`):null}${this._media(m)}${m.body?html`<div class="body"><span class="message-text">${unsafeHTML(linkify(m.body))}</span>${this.timestamp(m,true)}</div>`:null}${this.editHistory(m)}`:null}

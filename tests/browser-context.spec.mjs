@@ -287,8 +287,25 @@ try{
  // Desktop keeps the chat list active while the image fills the right pane.
  await navImage.click();await np.locator('#imageViewer:not([hidden])').waitFor();
  await np.setViewportSize({width:1200,height:844});
- const viewerBounds=await np.locator('#imageViewer').boundingBox(),sidebarBounds=await np.locator('.sidebar').boundingBox();
+ const {viewerBounds,sidebarBounds}=await np.evaluate(async()=>{await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const rect=selector=>{const b=document.querySelector(selector).getBoundingClientRect();return {x:b.x,width:b.width}};return {viewerBounds:rect('#imageViewer'),sidebarBounds:rect('.sidebar')}});
  assert.ok(viewerBounds.x>=sidebarBounds.x+sidebarBounds.width,JSON.stringify({viewerBounds,sidebarBounds}));
+ // The retained (inert) composer must not create an implicit second column.
+ for (const width of [390,1200]) {
+  await np.setViewportSize({width,height:844});
+  for (const [imageWidth,imageHeight] of [[200,800],[1600,400],[600,600]]) {
+   const bounds=await np.evaluate(async({imageWidth,imageHeight})=>{
+    const img=document.querySelector('#imageViewer img');
+    img.src='data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}"><rect width="100%" height="100%" fill="#238b88"/></svg>`);
+    await img.decode();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const rect=selector=>{const b=document.querySelector(selector).getBoundingClientRect();return {left:b.left,right:b.right,width:b.width}};
+    return {pane:rect('.conversation'),header:rect('.conversation-top'),viewer:rect('#imageViewer'),columns:getComputedStyle(document.querySelector('.conversation')).gridTemplateColumns};
+   },{imageWidth,imageHeight});
+   for (const part of ['header','viewer']) {
+    assert.ok(Math.abs(bounds[part].left-bounds.pane.left)<1&&Math.abs(bounds[part].right-bounds.pane.right)<1,JSON.stringify({width,imageWidth,imageHeight,part,...bounds}));
+   }
+  }
+ }
+ await np.setViewportSize({width:1200,height:844});
  assert.equal(await np.locator('#imageViewer').evaluate(el=>el.tagName),'SECTION');
  assert.equal(await np.locator('dialog[open]').count(),0);
  assert.equal(await np.locator('.sidebar').evaluate(el=>el.inert),false);
@@ -478,6 +495,28 @@ try{
   const quoteBox=await quotePage.locator('#photo-reply-check .quoted-message').boundingBox();
   assert.ok(box.x+box.width<=quoteBox.x+quoteBox.width+1);
   assert.ok(quoteBox.x+quoteBox.width<=width);
+  // Adding/removing a reaction keeps the image bubble and overlaid time stable.
+  for (const fromMe of [0,1]) {
+   await quotePage.evaluate(async fromMe=>{
+    const list=document.querySelector('#photo-reply-check');
+    list.messages=[{id:'react-photo',chat_id:'quote-test',type:'image',has_media:1,media_id:'demo-portrait',media_status:'ready',media_width:200,media_height:800,timestamp:1790760000,from_me:fromMe,reactions:[]}];
+    await list.updateComplete;await list.querySelector('img').decode();
+   },fromMe);
+   const geometry=()=>quotePage.evaluate(async()=>{
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const bubble=document.querySelector('[data-message-id="react-photo"]');
+    const rect=el=>{const b=el.getBoundingClientRect();return {x:b.x,y:b.y,width:b.width,height:b.height,bottom:b.bottom,right:b.right}};
+    return {bubble:rect(bubble),frame:rect(bubble.querySelector('.media-frame')),time:rect(bubble.querySelector('time')),position:getComputedStyle(bubble.querySelector('time')).position};
+   });
+   const before=await geometry();
+   for (const reactions of [[{emoji:'👍',actor_id:'me',from_me:true}],[]]) {
+    await quotePage.evaluate(async reactions=>{const list=document.querySelector('#photo-reply-check');list.messages=list.messages.map(m=>({...m,reactions}));await list.updateComplete},reactions);
+    const after=await geometry();
+    assert.equal(after.position,'absolute');
+    assert.ok(Math.abs(after.bubble.height-before.bubble.height)<1,JSON.stringify({width,fromMe,before,after}));
+    assert.ok(after.time.y>=after.frame.y&&after.time.bottom<=after.frame.bottom+1,JSON.stringify(after));
+   }
+  }
   await quotePage.close();
  }
  console.log('Image reply thumbnails: decoded image, fixed dimensions and no overflow on desktop/mobile passed');
