@@ -63,6 +63,8 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.event.release.tag_name || format('dev-{0}', github.sha) }}
           outputs: >-
             type=image,
             name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},
@@ -217,12 +219,18 @@ jobs:
       - name: Build release binaries
         env:
           OUT: ${{ github.workspace }}/release
+          VERSION: ${{ github.event.release.tag_name }}
         run: |
           sh scripts/build-binaries.sh \
             linux/amd64 \
             linux/arm64 \
             linux/arm/v7 \
             windows/amd64
+
+      - name: Verify embedded release version
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+        run: test "$(release/wisp-linux-amd64 --version)" = "wisp $VERSION"
 
       - name: Generate checksums
         working-directory: release
