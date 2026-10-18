@@ -136,7 +136,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
       state.hasOlder = older.length > 0;
       await renderMessages();
       const next = $('#messages');
-      if (next) {
+      if (next && state.scrollMode === 'prepend') {
         if (anchor) restoreScrollAnchor(anchor, next);
         else next.scrollTop = oldTop + (next.scrollHeight - oldHeight);
       }
@@ -146,7 +146,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
       throw error;
     } finally {
       if (chatId !== state.selectedChatId) return;
-      state.scrollMode = 'idle';
+      if(state.scrollMode==='prepend')state.scrollMode = 'idle';
       state.loadingOlder = false;
       await renderMessages();
     }
@@ -207,8 +207,8 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
     }
   }
 
-  function scrollBottom({ initial = false } = {}) {
-    if (state.scrollMode === 'prepend') return;
+  function scrollBottom({ initial = false, force = false } = {}) {
+    if (state.scrollMode === 'prepend' && !force) return;
     const el = $('#messages');
     if (!el) return;
     if (initial) state.scrollMode = 'initial';

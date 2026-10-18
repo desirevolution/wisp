@@ -62,3 +62,18 @@ The message JSON contract is documented in [api-contract.md](api-contract.md).
 - Image/text/reply drafts are in browser memory and disappear on page reload.
 - Received reactions may contain any emoji; creation uses the 32-emoji subset.
 - There is no automatic chat/media retention policy. Monitor available disk space.
+
+## Build version and daily release check
+
+The application version is a Go linker variable (`wisp/internal/appconfig.Version`),
+not a mutable runtime setting. Release workflows pass the GitHub release tag
+through `VERSION` to Docker/binary builds. Push builds use `dev-<commit>`; local
+build scripts use `VERSION`, an exact local Git tag, or `dev`.
+
+The backend requests the public GitHub latest stable release endpoint for
+`desirevolution/wisp` in the background. It uses a 10-second HTTP timeout, a
+bounded response and semantic version comparison. It checks when the stored
+24-hour interval expires, persists attempts/results in `app_config` without a
+schema migration, and retains known release data on transient errors. Fresh
+installs check asynchronously on startup. No GitHub token is required. It never
+downloads or installs a release automatically.

@@ -15,6 +15,7 @@ import (
 	"wisp/internal/mqttsvc"
 	"wisp/internal/pushsvc"
 	"wisp/internal/store"
+	"wisp/internal/updates"
 	"wisp/internal/webui"
 	"wisp/internal/whatsapp"
 )
@@ -73,6 +74,8 @@ func main() {
 	st.SetConfigOverride("mqttPassword", mqttPass)
 	st.SetConfigOverride("mqttTopicPrefix", mqttTopic)
 	bus := events.New()
+	updateChecker := updates.New(appconfig.Version, st, func(state updates.State) { bus.Publish(events.Event{Type: "update", Data: state}) })
+	updateChecker.Start(ctx)
 	mq := mqttsvc.New(st, bus)
 	mq.Start()
 	defer mq.Close()
@@ -87,7 +90,9 @@ func main() {
 		log.Fatal(err)
 	}
 	defer wa.Close()
-	srv := &http.Server{Addr: cfg.Listen, Handler: httpapi.New(st, wa, bus, mq, push, webui.FS(), cfg.PublicDir).Handler(), ReadHeaderTimeout: 10 * time.Second}
+	api := httpapi.New(st, wa, bus, mq, push, webui.FS(), cfg.PublicDir)
+	api.SetUpdateChecker(updateChecker)
+	srv := &http.Server{Addr: cfg.Listen, Handler: api.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		log.Printf("Wisp Go %s listening on %s", appconfig.Version, srv.Addr)
 		if e := srv.ListenAndServe(); e != nil && e != http.ErrServerClosed {

@@ -70,3 +70,17 @@ and reply for manual retry. Do not claim delivery before provider acknowledgemen
 
 Camera/file draft previews fit within the existing small preview bounds using
 their own aspect ratio, without a permanently fixed rectangular image box.
+
+## Own image send and runtime release information
+
+After a confirmed own image send in the currently displayed chat, scroll to the
+latest message even when previously reading history. Keep following late image
+layout until explicit user navigation/scroll. Use the acknowledged message ID
+to merge local context if SSE is delayed; retain loaded history and never resend
+an acknowledged image. Completing an upload for another chat must not change
+the current reading position. Failed sends retain the draft without forcing a
+scroll.
+
+Settings show the embedded version, last release-check time and an available
+stable update link. A small in-app update notice links to the same release.
+Live update events refresh the notice without reloading the conversation.

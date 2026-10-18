@@ -111,3 +111,14 @@ latest-message bottom position. Keep known/resolved frames stable across media
 status updates; later visits reuse the learned size. This supersedes the earlier
 rule that kept an unknown 3:2 fallback for the entire visit. Use proportional
 small image previews in the composer as well.
+
+## Confirmed image follow and release version/update information
+
+Follow successful own image sends to the chat bottom, including delayed media,
+with a message-context fallback when SSE has not arrived. Preserve loaded
+history and guard against chat changes and failed sends.
+
+Embed GitHub release tags into both Docker images and binaries. Show the running
+version in Settings and `--version`; development builds remain identifiable.
+Add cached, persistent backend release checks every 24 hours with semantic version
+comparison, bounded HTTP requests, failure handling and a live app notice.

@@ -111,6 +111,7 @@ export class WispComposer extends LitElement {
       const result = await response.json().catch(() => null);
       if (!response.ok || result?.ok !== true) throw new Error(result?.error || 'Message could not be sent');
       if (sessionDrafts.get(chat).revision === revision) sessionDrafts.update(chat, { text: '', reply: null, image: null });
+      if(draft.image)this.dispatchEvent(new CustomEvent('image-sent',{detail:{chatId:chat,messageId:result.id},bubbles:true,composed:true}));
       this.closePicker(); this._hideCompletion();
     } catch (e) { sessionDrafts.update(chat, { error: e.message || 'Message could not be sent' }); }
     finally { sessionDrafts.update(chat, { sending: false }); await this.updateComplete; if (this.isConnected && this.chatId === chat) this.focusInput(); }

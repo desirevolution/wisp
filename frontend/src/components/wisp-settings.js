@@ -6,6 +6,7 @@ const labelFor = state => ({starting:'Starting…',disconnecting:'Unlinking…',
 
 export class WispSettings extends LitElement {
   static properties = {
+    version:{type:String}, releaseUpdate:{attribute:false},
     status: { attribute:false }, followNewMessages:{type:Boolean}, mirrorOnly:{type:Boolean}, pushEnabled:{type:Boolean},
     installAvailable:{type:Boolean}, standalone:{type:Boolean}, confirmUnlink:{state:true}
   };
@@ -22,6 +23,7 @@ export class WispSettings extends LitElement {
     const s=this.status||{}, label=labelFor(s.state);
     return html`<div class="modal-backdrop" @keydown=${this.trapFocus} @click=${e=>{if(e.target===e.currentTarget)this.emit('settings-close')}}><section class="modal" role="dialog" aria-modal="true" aria-label="Settings">
       <div class="modal-head"><h2>Settings</h2><button class="icon-btn" aria-label="Close settings" @click=${()=>this.emit('settings-close')}>${icon('close')}</button></div>
+      <div class="setting-row app-version"><div><b>Wisp ${this.version||'dev'}</b><p>${this.releaseUpdate?.error?'Update check unavailable.':this.releaseUpdate?.available?`Version ${this.releaseUpdate.latest} is available.`:!this.releaseUpdate?.comparable?'Development build.':this.releaseUpdate?.checkedAt?'You are up to date.':'Checking for updates…'}</p>${this.releaseUpdate?.checkedAt?html`<small>Last checked: ${new Date(this.releaseUpdate.checkedAt).toLocaleString()}</small>`:nothing}</div>${this.releaseUpdate?.available?html`<a href=${this.releaseUpdate.url} target="_blank" rel="noopener noreferrer">View release</a>`:nothing}</div><hr>
       ${this.mirrorOnly?html`<div class="setting-row"><div><b>Follow new messages</b><p>Automatically open the latest incoming chat. Intended for a dedicated mirror display.</p></div><label class="switch" aria-label="Follow new messages"><input type="checkbox" .checked=${this.followNewMessages} @change=${e=>this.emit('follow-change',e.target.checked)}><span></span></label></div><hr>`:nothing}
       <div class="setting-row"><div><b>WhatsApp connection</b><p><i class="dot ${s.state==='connected'?'ok':s.state==='error'?'bad':''}"></i>${label}${s.account?` · ${s.account}`:''}</p></div><button @click=${()=>this.emit('settings-reconnect')}>Reconnect</button></div>
       ${s.state==='error'?html`<div class="error-detail"><b>Connection problem</b><p>${friendlyError(s)}</p><details><summary>Technical details</summary><pre>${s.error||''}</pre></details></div>`:nothing}

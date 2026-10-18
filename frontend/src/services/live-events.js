@@ -1,4 +1,4 @@
-const SERVER_EVENTS = ['connection', 'message', 'media', 'metadata', 'reaction', 'deletion', 'edit'];
+const SERVER_EVENTS = ['connection', 'message', 'media', 'metadata', 'reaction', 'deletion', 'edit', 'update'];
 
 /** Bridges the server's SSE stream to application events.
  * Consumers never need to know about EventSource or JSON framing.

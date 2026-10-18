@@ -121,3 +121,14 @@ original WhatsApp image, video or sticker metadata. Retained descriptors also
 support previously stored messages without changing the database schema.
 Missing or invalid metadata leaves the fields absent. Raw descriptors and keys
 remain private; the API does not fetch image bytes to determine layout.
+
+## Runtime version and release updates
+
+`GET /api/status` exposes the build's `version` and cached `update` state:
+`current`, optional `latest`/`url`/`checkedAt`/`error`, and `available`/`comparable`.
+`checkedAt` is Unix milliseconds for the latest completed check attempt.
+The response is not cached by the browser. A new `update` SSE event carries the
+same cached state when the backend check completes. Reading status or opening
+Settings does not trigger a GitHub request. Development versions are not
+comparable to stable releases. On errors, retain the last known release while
+showing that the latest check was unavailable.

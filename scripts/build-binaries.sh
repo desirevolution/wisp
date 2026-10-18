@@ -4,6 +4,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 OUT="${OUT:-$ROOT/dist}"
 PROGRESS="${PROGRESS:-plain}"
+VERSION=$(sh "$ROOT/scripts/build-version.sh")
 
 if [ "$#" -eq 0 ]; then
   set -- linux/amd64 linux/arm64 linux/arm/v7 windows/amd64
@@ -46,6 +47,7 @@ for platform do
   # The binaries target contains only /wisp, including for Windows builds.
   docker buildx build \
     --progress "$PROGRESS" \
+    --build-arg "VERSION=$VERSION" \
     --build-arg "TARGETOS=$os" \
     --build-arg "TARGETARCH=$arch" \
     --build-arg "TARGETVARIANT=$variant" \

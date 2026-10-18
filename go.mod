@@ -7,6 +7,7 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	go.mau.fi/whatsmeow v0.0.0-20260928110833-d9538eeba3ac
+	golang.org/x/mod v0.41.0
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.60.0
 )

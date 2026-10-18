@@ -19,21 +19,25 @@ import (
 	"wisp/internal/mqttsvc"
 	"wisp/internal/pushsvc"
 	"wisp/internal/store"
+	"wisp/internal/updates"
 	"wisp/internal/whatsapp"
 )
 
 type Server struct {
-	st     *store.Store
-	wa     *whatsapp.Service
-	bus    *events.Bus
-	mqtt   *mqttsvc.Service
-	push   *pushsvc.Service
-	public string
-	assets fs.FS
+	updateChecker *updates.Checker
+	st            *store.Store
+	wa            *whatsapp.Service
+	bus           *events.Bus
+	mqtt          *mqttsvc.Service
+	push          *pushsvc.Service
+	public        string
+	assets        fs.FS
 
 	mediaQueueMu sync.Mutex
 	mediaQueued  map[string]struct{}
 }
+
+func (s *Server) SetUpdateChecker(checker *updates.Checker) { s.updateChecker = checker }
 
 func New(st *store.Store, wa *whatsapp.Service, b *events.Bus, mq *mqttsvc.Service, push *pushsvc.Service, assets fs.FS, public string) *Server {
 	return &Server{st: st, wa: wa, bus: b, mqtt: mq, push: push, assets: assets, public: public, mediaQueued: make(map[string]struct{})}
@@ -116,7 +120,13 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	jsonOut(w, code, map[string]any{"status": map[bool]string{true: "ok", false: "unhealthy"}[ok], "whatsapp": state, "database": map[bool]string{true: "ok", false: "error"}[dbErr == nil], "lastEventAt": a, "lastMessageAt": b, "mqtt": s.mqtt.Status()})
 }
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
-	jsonOut(w, 200, map[string]any{"version": appconfig.Version, "whatsapp": s.wa.Status(), "push": s.push.Status(), "send": map[string]any{"enabled": !s.st.ConfigBool("mirrorOnly", false)}})
+	var update *updates.State
+	if s.updateChecker != nil {
+		state := s.updateChecker.Status()
+		update = &state
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	jsonOut(w, 200, map[string]any{"version": appconfig.Version, "update": update, "whatsapp": s.wa.Status(), "push": s.push.Status(), "send": map[string]any{"enabled": !s.st.ConfigBool("mirrorOnly", false)}})
 }
 func (s *Server) pushPublicKey(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

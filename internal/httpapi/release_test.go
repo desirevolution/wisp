@@ -10,6 +10,7 @@ import (
 	"wisp/internal/mqttsvc"
 	"wisp/internal/pushsvc"
 	"wisp/internal/store"
+	"wisp/internal/updates"
 	"wisp/internal/whatsapp"
 )
 
@@ -26,14 +27,20 @@ func TestReleaseVersionAndUnpairedHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 	mq := mqttsvc.New(st, bus)
-	handler := New(st, wa, bus, mq, push, nil, "").Handler()
+	api := New(st, wa, bus, mq, push, nil, "")
+	api.SetUpdateChecker(updates.New(appconfig.Version, st, nil))
+	handler := api.Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/api/status", nil))
 	var status struct {
-		Version string `json:"version"`
+		Version string        `json:"version"`
+		Update  updates.State `json:"update"`
 	}
 	if err = json.Unmarshal(rec.Body.Bytes(), &status); err != nil || rec.Code != 200 || status.Version != appconfig.Version {
 		t.Fatal(rec.Code, status, err)
+	}
+	if status.Update.Current != appconfig.Version {
+		t.Fatal(status.Update)
 	}
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/health", nil))

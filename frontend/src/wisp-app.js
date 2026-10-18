@@ -60,6 +60,7 @@ const state=new Proxy({}, {
 });
 let toastTimer=null,settingsReturnFocus=null,settingsKeyHandler=null;
 const earlyMediaEvents=new Map();
+let imageScrollIntent=null;
 function showToast(message,kind='error'){let el=$('#appToast');if(!el){el=document.createElement('div');el.id='appToast';app.appendChild(el)}el.className=`app-toast ${kind}`;el.textContent=message;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{el.hidden=true},4500)}
 let navigation,conversation,gallery,pwa;
 let suspendedAnchor=null;
@@ -67,7 +68,7 @@ const chatPositions=new Map();
 function rememberPosition(){
   if(!state.chatPreparing&&state.selectedChatId&&state.view==='chat')chatPositions.set(state.selectedChatId,{anchor:conversation?.captureScrollAnchor(),bottom:conversation?.isNearBottom()});
 }
-function backToSelection(){
+function backToSelection(){imageScrollIntent=null;
   const previous=state.selectedChatId;
   rememberPosition();++chatLoadToken;cancelChatPreparation();gallery.cancel();
   $('#messages')?.closePanel(false);$('#composer')?.closePicker();
@@ -81,7 +82,7 @@ function backToSelection(){
 }
 
 function connectionLabel(){if(state.connection.state==='connected'&&state.connection.syncing)return state.connection.syncPhase==='importing_history'?'Syncing chats…':state.connection.syncPhase==='settling_history'?'Finishing sync…':state.connection.syncPhase==='checking_history'?'Checking history…':'Syncing…';return({starting:'Starting…',disconnecting:'Disconnecting…',reconnecting:'Reconnecting…',waiting_for_qr:'Waiting for QR scan',authenticating:'Signing in…',connected:'Connected',disconnected:'Disconnected',error:'Connection error'}[state.connection.state]||state.connection.state)}
-async function loadStatus({render=true}={}){const x=await apiJson('/api/status');state.connection=x.whatsapp;state.sendEnabled=Boolean(x.send?.enabled);if(render)renderShell()}
+async function loadStatus({render=true}={}){const x=await apiJson('/api/status');state.version=x.version||'dev';state.update=x.update;state.connection=x.whatsapp;state.sendEnabled=Boolean(x.send?.enabled);if(render)renderShell()}
 async function loadConfig(){const x=await apiJson('/api/config');state.sendEnabled=Boolean(x.sendEnabled);state.mirrorOnly=Boolean(x.mirrorOnly);state.followNewMessages=Boolean(x.followNewMessages);}
 async function saveConfig(patch){const x=await apiJson('/api/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(patch)});state.sendEnabled=Boolean(x.sendEnabled);state.mirrorOnly=Boolean(x.mirrorOnly);state.followNewMessages=Boolean(x.followNewMessages);syncSettings()}async function loadChats({render=true}={}){state.chats=await apiJson('/api/chats');if(render)renderChatList();renderConversationHeader()}
 let chatLoadToken=0;
@@ -123,7 +124,7 @@ async function failChatPreparation(token,error){
   state.messageLoading=false;state.chatLoadError=error.message||'Could not load messages.';
   renderShell({refreshMessages:false});
 }
-async function selectChat(id){
+async function selectChat(id){imageScrollIntent=null;
   if(id===state.selectedChatId&&state.view==='chat'){
     if(state.chatPreparing&&!state.chatLoadError)return;
     if(!state.chatPreparing){app.classList.add('open');state.unread.delete(id);renderChatList();renderConversationHeader();focusComposer();return}
@@ -169,7 +170,7 @@ async function selectChat(id){
   }
 }
 
-async function openMessage(chatId,messageId,loaded=null){
+async function openMessage(chatId,messageId,loaded=null){imageScrollIntent=null;
   rememberPosition();
   const token=++chatLoadToken;
   state.selectedChatId=chatId;state.view='chat';state.unread.delete(chatId);conversation.resetForChat();app.classList.add('open');beginChatPreparation(token);
@@ -295,6 +296,7 @@ function renderShell({refreshMessages=true}={}){
       <wisp-composer id="composer" .inert=${state.chatPreparing} ?hidden=${paused||!state.sendEnabled||state.mirrorOnly||!state.selectedChatId||state.view!=='chat'}></wisp-composer>
       <wisp-connection id="connectionView" ?hidden=${connected}></wisp-connection>
     </main>
+    <div id="updateNotice" class="update-notice" role="status" ?hidden=${!state.update?.available}>Update ${state.update?.latest} available <a href=${state.update?.url||'https://github.com/desirevolution/wisp/releases'} target="_blank" rel="noopener noreferrer">View release</a></div>
     <wisp-settings id="settings" ?hidden=${!state.settingsOpen}></wisp-settings>
     <div id="appToast" role="status" aria-live="polite" hidden></div>
   `,app);
@@ -330,12 +332,33 @@ async function retryMedia(messageId){
     if(button?.isConnected){button.disabled=false;button.textContent='Retry'}
   }
 }
+function renderUpdateNotice(){renderShell({refreshMessages:false})}
+async function followSentImage({chatId,messageId}){
+  if(state.selectedChatId!==chatId||state.view!=='chat'||state.chatPreparing)return;
+  const intent={chatId,messageId};imageScrollIntent=intent;
+  await $('#composer')?.updateComplete;
+  if(imageScrollIntent!==intent||state.selectedChatId!==chatId)return;
+  conversation.scrollBottom({initial:true,force:true});
+  // Acknowledgement can arrive before SSE (or after an SSE interruption).
+  // Merge the local message context without replacing already loaded history.
+  if(messageId&&!state.messages.some(m=>m.id===messageId)){
+    try{
+      const rows=await apiJson(`/api/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/context`);
+      if(imageScrollIntent!==intent||state.selectedChatId!==chatId||state.view!=='chat')return;
+      state.messages=mergeKnownReactions([...new Map([...state.messages,...rows].map(m=>[m.id,m])).values()].sort((a,b)=>a.timestamp-b.timestamp||a.id.localeCompare(b.id)),state.reactionStates);
+      state.messageCache.set(chatId,{messages:[...state.messages],hasOlder:state.hasOlder,at:Date.now()});
+      await conversation.renderMessages();
+      if(state.selectedChatId===chatId)conversation.scrollBottom({initial:true,force:true});
+    }catch{/* The live event may still arrive; an acknowledged send is never retried. */}
+  }
+  if(state.messages.some(m=>m.id===messageId)&&imageScrollIntent===intent)imageScrollIntent=null;
+}
 function focusComposer(){if(state.chatPreparing||!state.sendEnabled||!state.selectedChatId||state.view!=='chat'||!window.matchMedia('(min-width: 701px)').matches||state.settingsOpen)return;state.activePane='right';state.keyboardNavActive=false;requestAnimationFrame(()=>{$('#composer')?.focusInput();navigation?.updateKeyboardModeIndicator();navigation?.updateActivePane()})}
 function wireComposer(){const composer=$('#composer');if(!composer)return;composer.chatId=state.selectedChatId;composer.blocked=state.chatPreparing;composer.requestUpdate()}
 function syncConnection(){const el=$('#connectionView');if(el){el.status=state.connection;el.requestUpdate()}}
-function syncSettings(){const el=$('#settings');if(!el)return;el.status=state.connection;el.followNewMessages=state.followNewMessages;el.mirrorOnly=state.mirrorOnly;el.pushEnabled=state.pushEnabled;el.installAvailable=Boolean(state.installPrompt);el.standalone=state.isStandalone;el.requestUpdate()}
+function syncSettings(){const el=$('#settings');if(!el)return;el.version=state.version;el.releaseUpdate=state.update;el.status=state.connection;el.followNewMessages=state.followNewMessages;el.mirrorOnly=state.mirrorOnly;el.pushEnabled=state.pushEnabled;el.installAvailable=Boolean(state.installPrompt);el.standalone=state.isStandalone;el.requestUpdate()}
 function renderSettings(){const el=$('#settings');if(!el)return;el.hidden=!state.settingsOpen;for(const node of app.querySelectorAll('.sidebar,.conversation,.sidebar-resize'))node.inert=state.settingsOpen;wireSettings(el);syncSettings()}
-function openSettings(){if(state.settingsOpen)return;settingsReturnFocus=document.activeElement;state.settingsOpen=true;renderSettings();requestAnimationFrame(()=>$('#settings')?.querySelector('.modal-head .icon-btn')?.focus())}
+function openSettings(){if(state.settingsOpen)return;void loadStatus({render:false}).then(()=>{syncSettings();renderUpdateNotice()}).catch(()=>{});settingsReturnFocus=document.activeElement;state.settingsOpen=true;renderSettings();requestAnimationFrame(()=>$('#settings')?.querySelector('.modal-head .icon-btn')?.focus())}
 function removeSettingsKeyHandler(){if(settingsKeyHandler){document.removeEventListener('keydown',settingsKeyHandler);settingsKeyHandler=null}}
 function closeSettings(){if(!state.settingsOpen)return;removeSettingsKeyHandler();state.settingsOpen=false;if($('#settings'))$('#settings').confirmUnlink=false;renderSettings();requestAnimationFrame(()=>{if(settingsReturnFocus?.isConnected)settingsReturnFocus.focus();else $('#settingsBtn')?.focus();settingsReturnFocus=null})}
 function reconnectWhatsApp(){state.connection={...state.connection,state:'reconnecting',qr:null,error:null};renderShell();fetch('/api/whatsapp/reconnect',{method:'POST'}).catch(()=>{state.connection={...state.connection,state:'error',error:'Reconnect request failed.'};renderShell()})}
@@ -343,6 +366,7 @@ function wireShell(){
   conversation?.wireMessageList($('#messages'));navigation?.wireShell();
   const once=(id,event,handler)=>{const el=$(id);if(el&&!el.dataset.shellWired){el.addEventListener(event,handler);el.dataset.shellWired='true'}};
   once('#back','click',backToSelection);
+  once('#composer','image-sent',event=>followSentImage(event.detail));
   once('#settingsBtn','click',openSettings);
   once('#newMessages','click',()=>conversation.scrollBottom());
   once('#mediaBtn','click',()=>gallery.open('media'));
@@ -362,13 +386,14 @@ pwa=createPwaService({store,apiJson,onStateChange:()=>{if(state.settingsOpen)ren
 pwa.start();
 const bus=createEventBus();
 connectLiveEvents(bus);
-bus.on('live:open',()=>{loadChats({render:false}).then(()=>{renderChatList();renderConversationHeader()}).catch(()=>{});syncReactions().catch(()=>{})});
+bus.on('live:open',()=>{void loadStatus({render:false}).then(()=>{syncSettings();renderUpdateNotice()}).catch(()=>{});loadChats({render:false}).then(()=>{renderChatList();renderConversationHeader()}).catch(()=>{});syncReactions().catch(()=>{})});
 bus.on('live:edit',data=>updateEditView(data).catch(console.error));
 bus.on('live:deletion',data=>updateDeletionView(data).catch(console.error));
 bus.on('live:reaction',data=>updateReactionView(data).catch(console.error));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')syncReactions().catch(()=>{})});
+bus.on('live:update',update=>{state.update=update;syncSettings();renderUpdateNotice()});
 bus.on('live:connection',next=>{state.connection=next;renderShell()});
-bus.on('live:message',async m=>{m=mergeKnownReactions([m],state.reactionStates)[0];const atBottom=conversation.isNearBottom(),c=state.chats.find(x=>x.id===m.chat_id);if(c){c.last_message_id=m.id;c.last_message_at=m.timestamp;c.last_body=m.body;c.last_type=m.type;c.last_from_me=m.from_me;c.last_sender_name=m.sender_name;state.chats.sort((a,b)=>(b.last_message_at||0)-(a.last_message_at||0));renderChatList();renderConversationHeader()}else{loadChats({render:false}).then(()=>{renderChatList();renderConversationHeader()}).catch(()=>{})}if(state.selectedChatId===m.chat_id&&app.classList.contains('open')){if(!state.messages.some(x=>x.id===m.id)){state.messages.push(m);state.messageCache.set(m.chat_id,{messages:[...state.messages],hasOlder:state.hasOlder,at:Date.now()});if(state.view==='chat'){await conversation.renderMessages();if(atBottom)conversation.scrollBottom();else{state.newWhileReading++;conversation.updateNewButton()}}if(earlyMediaEvents.delete(m.id)){refreshSelectedMessages().catch(()=>{})}}return}if(m.from_me)return;state.unread.set(m.chat_id,(state.unread.get(m.chat_id)||0)+1);renderChatList();if(state.mirrorOnly&&state.followNewMessages){selectChat(m.chat_id)}});
+bus.on('live:message',async m=>{m=mergeKnownReactions([m],state.reactionStates)[0];const atBottom=conversation.isNearBottom(),c=state.chats.find(x=>x.id===m.chat_id);if(c){c.last_message_id=m.id;c.last_message_at=m.timestamp;c.last_body=m.body;c.last_type=m.type;c.last_from_me=m.from_me;c.last_sender_name=m.sender_name;state.chats.sort((a,b)=>(b.last_message_at||0)-(a.last_message_at||0));renderChatList();renderConversationHeader()}else{loadChats({render:false}).then(()=>{renderChatList();renderConversationHeader()}).catch(()=>{})}if(state.selectedChatId===m.chat_id&&app.classList.contains('open')){if(!state.messages.some(x=>x.id===m.id)){state.messages.push(m);state.messageCache.set(m.chat_id,{messages:[...state.messages],hasOlder:state.hasOlder,at:Date.now()});if(state.view==='chat'){await conversation.renderMessages();if(atBottom||imageScrollIntent?.messageId===m.id){const ownImage=imageScrollIntent?.messageId===m.id;conversation.scrollBottom(ownImage?{initial:true,force:true}:{});if(ownImage)imageScrollIntent=null}else{state.newWhileReading++;conversation.updateNewButton()}}if(earlyMediaEvents.delete(m.id)){refreshSelectedMessages().catch(()=>{})}}return}if(m.from_me)return;state.unread.set(m.chat_id,(state.unread.get(m.chat_id)||0)+1);renderChatList();if(state.mirrorOnly&&state.followNewMessages){selectChat(m.chat_id)}});
 bus.on('live:media',async d=>{
   if(state.selectedChatId!==d.chatId)return;
   if(state.view==='gallery'){gallery.refresh();return}

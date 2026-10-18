@@ -160,3 +160,29 @@ and `go test ./...` in CI. No production schema or runtime change was necessary.
   their original ratios before downloading.
 - This intentionally supersedes the earlier entire-visit fallback freeze. No
   backend or database change; physical Android verification remains outstanding.
+
+## Image-send follow, runtime release version and daily update check
+
+Based on the new uploaded `wisp-main(8).zip`.
+
+- All Go packages pass `go test ./...`, including the previously corrected media
+  dimension fixture and new release-check tests. `go mod verify` and `go vet ./...`
+  pass. Race tests pass for `internal/updates` and `internal/httpapi`.
+- New update tests cover numeric semantic ordering (1.10 vs 1.9), prerelease
+  current versions, build metadata, development versions, stable-only response
+  validation, cancellation, invalid JSON, rate-limit failures, retained known
+  releases, persisted daily attempts and restart behavior.
+- The compiled CLI returns `wisp v1.2.3` with the injected linker version without
+  initializing the server. Source/package/service-worker consistency check passes.
+- Workflow YAML parses, shell syntax passes, and the version resolver accepts
+  safe release tags while rejecting whitespace, newline and shell substitutions.
+  The binary release job now verifies its Linux amd64 `--version` before upload.
+- 31 JavaScript unit tests, all four DOM suites, frontend production build and
+  the full desktop/mobile Chromium suite pass.
+- Browser regressions cover Settings version/release links, the app update
+  notice, acknowledged image send without SSE, retained loaded history, late
+  image decoding and an upload completed after switching chats. Existing
+  incoming-history position behavior continues to pass.
+- Docker builds and actual GitHub release publishing were not executed here.
+  Update transport is tested with local mock HTTP servers; live GitHub timing
+  and real Android/WhatsApp delivery remain device/integration checks.

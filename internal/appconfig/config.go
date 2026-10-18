@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-const Version = "1.0.0"
+// Version is injected from the release tag with go build -ldflags -X.
+var Version = "dev"
 
 type Config struct {
 	Listen, DataDir, DBPath, WhatsAppDBPath, PublicDir      string

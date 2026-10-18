@@ -297,6 +297,10 @@ button:focus-visible{outline:2px solid #53bdeb;outline-offset:2px}
 .image-draft button{background:none;border:0;color:#aebac1;font-size:25px;cursor:pointer;padding:8px}
 .send-progress{display:flex;align-items:center;gap:8px;padding:4px 0 8px;color:#c4ded7;font-size:13px}
 .send-progress .sync-spinner{flex:none}
+.update-notice{position:fixed;right:12px;bottom:76px;z-index:20;max-width:calc(100vw - 24px);padding:9px 12px;border:1px solid #40535e;border-radius:8px;background:#202c33;color:#c4ded7;font-size:13px;box-shadow:0 2px 12px #0004}
+.update-notice[hidden]{display:none}
+.update-notice a,.app-version a{color:#62dbc0;margin-left:8px;white-space:nowrap}
+.app-version small{color:#b8c7ce}
 .image-btn{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:38px;height:40px;background:none;border:0;color:#aebac1;cursor:pointer;border-radius:8px}
 .image-btn:hover{background:#2a3942}.image-btn:disabled,.image-draft button:disabled{opacity:.45;cursor:default}
 .camera-btn{display:none}

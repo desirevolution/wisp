@@ -272,6 +272,43 @@ try{
  assert.ok(frames.length>0);assert.ok(frames.every(frame=>!frame.skeleton&&Math.abs(frame.top-1100)<2),JSON.stringify(frames));
  assert.deepEqual(switching.errors,[]);await switching.context.close();console.log('Chat switching: cached refresh preserves the live reading position without loading frames');
 
+ // A successful image POST must reveal its message even without an SSE event,
+ // then keep following late media layout. Uploads completed in another chat
+ // must never pull that chat away from its reading position.
+ const uploaded=await pageFor({viewport:{width:1200,height:850}}),up=uploaded.page;
+ const photo={id:'photo-scroll',chat_id:chat,from_me:1,type:'image',body:'Uploaded photo',has_media:1,media_id:'demo-portrait',media_status:'ready',media_width:200,media_height:800,timestamp:1790770000,reactions:[]};
+ await up.route('**/api/status',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({version:'v1.2.3',whatsapp:{state:'connected'},send:{enabled:true},update:{current:'v1.2.3',latest:'v1.3.0',url:'https://github.com/desirevolution/wisp/releases/tag/v1.3.0',available:true,comparable:true,checkedAt:1790760000000}})}));
+ await up.getByRole('button',{name:'Open settings',exact:true}).click();
+ await up.getByText('Wisp v1.2.3',{exact:true}).waitFor();
+ await up.locator('.app-version').getByRole('link',{name:'View release'}).waitFor();
+ await up.getByRole('button',{name:'Close settings',exact:true}).click();
+ await up.locator('#updateNotice').waitFor();
+ await up.route('**/messages/photo-scroll/context',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([photo])}));
+ await up.route('**/send-image',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,id:photo.id})}));
+ let showPhoto;const photoGate=new Promise(resolve=>{showPhoto=resolve});
+ await up.route('**/api/media/demo-portrait',async route=>{await photoGate;await route.continue()});
+ await up.locator('#imageFile').setInputFiles({name:'photo.png',mimeType:'image/png',buffer:await readFile('tests/fixtures/pixel.png')});
+ await up.locator('#messages').evaluate(el=>{el.dispatchEvent(new WheelEvent('wheel'));el.scrollTop=600;el.dispatchEvent(new Event('scroll'))});
+ await up.locator('#sendBtn').click();
+ await up.locator('[data-message-id="photo-scroll"]').waitFor();
+ await up.waitForFunction(()=>{const el=document.querySelector('#messages');return el.scrollHeight-el.scrollTop-el.clientHeight<2});
+ assert.equal(await up.locator('[data-message-id="g@g.us-0"]').count(),1,'Context merge must retain loaded history');
+ showPhoto();await up.locator('[data-message-id="photo-scroll"] .media-loaded').waitFor();
+ await up.waitForFunction(()=>{const el=document.querySelector('#messages');return el.scrollHeight-el.scrollTop-el.clientHeight<2});
+ await up.unroute('**/send-image');
+ let finishOther;const otherGate=new Promise(resolve=>{finishOther=resolve});
+ await up.route('**/send-image',async route=>{await otherGate;await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,id:'late-photo'})})});
+ await up.locator('#imageFile').setInputFiles({name:'photo.png',mimeType:'image/png',buffer:await readFile('tests/fixtures/pixel.png')});
+ await up.locator('#sendBtn').click();
+ await up.locator(`[data-id="${other}"]`).click();await up.locator('[data-message-id="h@g.us-59"]').waitFor();
+ await up.locator('#messages').evaluate(el=>{el.dispatchEvent(new WheelEvent('wheel'));el.scrollTop=600;el.dispatchEvent(new Event('scroll'))});
+ const otherTop=await up.locator('#messages').evaluate(el=>el.scrollTop);
+ const lateResponse=up.waitForResponse(response=>response.url().endsWith('/send-image'));
+ finishOther();await lateResponse;await up.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ assert.ok(Math.abs(await up.locator('#messages').evaluate(el=>el.scrollTop)-otherTop)<2);
+ assert.deepEqual(uploaded.errors,[]);await uploaded.context.close();
+ console.log('Release settings/update notice and successful image scroll: no SSE, late image, retained history and cross-chat guard passed');
+
  // Stage an uncached media chat: first text/layout, then independently loaded image.
  mediaDemo=true;
  const staged=await pageFor({viewport:{width:1200,height:850}}),mp=staged.page;

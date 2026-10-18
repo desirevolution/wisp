@@ -71,3 +71,15 @@ There is no prescribed seven-day observation period.
 
 No repository changes, image publication or license selection are performed by
 this source package.
+
+## Release tag propagation
+
+- Publish a stable semantic tag such as `v1.2.3`; the workflow passes it as
+  `VERSION` for native Docker image builds and cross-compiled binaries.
+- The binary release job runs the Linux amd64 binary and verifies that
+  `--version` matches the release tag before uploading assets.
+- Verify the same tag in Settings and `/api/status`.
+- Package/service-worker versions track source assets separately; runtime
+  version reporting comes from the embedded Go build version.
+- Smoke-test the daily update hint against a newer stable release. Drafts,
+  prereleases and invalid release metadata must not produce an update hint.

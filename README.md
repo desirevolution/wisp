@@ -18,6 +18,8 @@ A lightweight, self-hosted WhatsApp companion with a responsive web UI, messagin
   remains available.
 - Show received reactions, edits and deletion markers, including stored context.
 - Receive live SSE updates, install the PWA and optionally enable per-device Web Push.
+- See the installed release version in Settings or via `--version`, with daily
+  backend checks and a notice for newer stable releases.
 - Publish incoming messages to MQTT; optionally run as a read-only mirror.
 
 One WhatsApp account per installation. Authentication belongs to your reverse
@@ -186,3 +188,28 @@ This project was built with AI assistance. I'm a lazy dev.
 ## License
 
 [MIT](LICENSE).
+
+## Version and update checks
+
+Published Docker images and binaries embed the exact GitHub release tag. Check it
+in Settings or without starting Wisp:
+
+```sh
+./wisp --version
+docker run --rm ghcr.io/desirevolution/wisp:latest --version
+```
+
+The backend checks the newest stable GitHub release once every 24 hours. Results
+and the last attempt are kept in the existing database, including across restarts.
+The app shows an update notice with a release link; Settings also show the latest
+check time. Checks run in the background and failures do not block chatting.
+Updates are installed manually. Development builds display `dev` or `dev-<commit>`
+and do not claim to be up to date against a stable release.
+
+For a local versioned build, use `VERSION=v1.2.3 sh build-static.sh`,
+`VERSION=v1.2.3 sh scripts/build-binaries.sh`, or Docker's
+`--build-arg VERSION=v1.2.3`. Plain `go build` defaults to `dev`; the equivalent
+linker option is `-ldflags="-X wisp/internal/appconfig.Version=v1.2.3"`.
+
+After a successful own image send, the chat follows the uploaded image, including
+late media layout. Delayed sends do not move another chat's reading position.

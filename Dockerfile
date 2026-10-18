@@ -16,7 +16,9 @@ COPY --from=frontend /src/public ./internal/webui/public
 ARG TARGETOS=linux
 ARG TARGETARCH
 ARG TARGETVARIANT
+ARG VERSION=dev
 RUN set -eux; \
+    case "$VERSION" in ''|*[!A-Za-z0-9._+-]*) echo 'Invalid VERSION' >&2; exit 1 ;; esac; \
     arch="${TARGETARCH:-$(go env GOARCH)}"; \
     case "$arch/$TARGETVARIANT" in \
       arm/v7) goarm=7 ;; \
@@ -24,7 +26,7 @@ RUN set -eux; \
       *) goarm="" ;; \
     esac; \
     CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="$arch" GOARM="$goarm" \
-      go build -trimpath -ldflags="-s -w" -o /out/wisp ./cmd/wisp
+      go build -trimpath -ldflags="-s -w -X wisp/internal/appconfig.Version=$VERSION" -o /out/wisp ./cmd/wisp
 
 # Export only the executable, never the complete builder filesystem.
 # This stage stays native even when TARGETOS is Windows.
