@@ -9,7 +9,7 @@ Validation performed on 17 October 2026 against mocked WhatsApp transport.
 - All four DOM suites: components/application events, connection states, image composer and timestamps/contrast.
 - Vite production build.
 - Headless Chromium 153 desktop (1200 × 850): existing reply/reaction/image send and error flows; draft retention across reload; stable textarea identity/focus during connection updates; sidebar keyboard resize and persistence; search result/Back restoration; settings Back; gallery Back; Escape/chat-keyboard/Enter focus; five-line composer; incoming-message reading position/count; disconnect/reconnect reading anchor and draft preservation.
-- Headless Chromium mobile emulation (390 × 844, touch): one visible menu action opens a bottom sheet; preview, direct reaction/removal and Reply work; background, Escape and browser Back close the sheet; Enter inserts a newline. A 320 × 480 viewport additionally checks sheet bounds and visible Reply action.
+- Headless Chromium mobile emulation (390 × 844, touch): a long press opens a bottom sheet; preview, compact reactions, full picker, and Reply/copy subview work; background, Escape and browser Back close the sheet; Enter inserts a newline. A 320 × 480 viewport additionally checks sheet bounds and visible Reply action.
 - Mirror mode: send actions/composer hidden.
 - Desktop/mobile screenshots inspected internally. Sample fonts in the test environment do not include every emoji.
 
@@ -287,3 +287,25 @@ preparation, correct bottom position from the first revealed frame, one entrance
 per cached visit and no replay for media updates. Desktop/mobile and both
 motion preferences are covered alongside rapid selection and Back cancellation.
 The existing 150 ms loading minimum and independent image loading remain.
+
+
+Message action update (19 October 2026):
+
+- Desktop hover/focus controls are React, Reply, More, mirrored so React stays
+  nearest to incoming/outgoing bubbles. Anchored More offers exact body/caption
+  copying and PNG image copying; conversion preserves the decoded image size.
+- Mobile uses a 450 ms hold, cancelled by movement, scrolling, pointer cancel,
+  multiple pointers or chat changes. The synthetic release click is suppressed
+  even if it lands on the newly opened sheet. Short image taps still work.
+- Compact sheet: six recent emojis, deduplicated and filled by defaults, plus
+  More emojis and More actions. Subviews have a Back action; only options show
+  Reply/copy. Read-only mirror sheets open directly to copy options.
+- Clipboard failure leaves the menu open with an error and explicit image
+  download fallback. Success closes it and emits a brief toast.
+- Real Chromium clipboard read/write checks cover both text and PNG images;
+  injected permission/API failures verify download fallback. Real CDP touch
+  events cover hold, short tap, scroll cancellation, links and the full sheet
+  flow. Desktop button geometry, keyboard entry/Escape, mirror mode, caption
+  versus image-only eligibility and no backend mutations are asserted.
+- The full Node, DOM and browser suites, production build and Go tests pass.
+  Physical Android/iOS clipboard/keyboard behavior still needs device checks.

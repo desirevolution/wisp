@@ -144,3 +144,10 @@ Keep the desktop sidebar available and the underlying message layout/reading
 position intact. Switching chats while viewing an image collapses that image
 history layer so the next Back returns to the overview. This supersedes the
 modal presentation from the previous follow-up.
+
+
+Message actions: desktop React/Reply/More controls now mirror around the message
+bubble. Mobile replaces per-message buttons with long press and a compact
+recent-reaction sheet, with separate full emoji and action views. Text/caption
+and image copying work in normal and mirror mode; failed image copying offers
+a download. Added real clipboard and touch regressions.

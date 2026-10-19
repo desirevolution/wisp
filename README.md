@@ -28,8 +28,8 @@ proxy; Wisp has no built-in login or user permissions.
 ## Screenshots
 
 <p align="center">
-  <a href="screenshots/wisp-desktop.png?v=3" target="_blank">
-    <img src="screenshots/wisp-desktop.png?v=3" width="1200" alt="Desktop">
+  <a href="screenshots/wisp-desktop.png?v=4" target="_blank">
+    <img src="screenshots/wisp-desktop.png?v=4" width="1200" alt="Desktop">
   </a>
   <br>
   <sub><b>Desktop</b></sub>
@@ -38,8 +38,8 @@ proxy; Wisp has no built-in login or user permissions.
 <br>
 
 <p align="center">
-  <a href="screenshots/wisp-mobile.png?v=3" target="_blank">
-    <img src="screenshots/wisp-mobile.png?v=3" width="400" alt="Mobile">
+  <a href="screenshots/wisp-mobile.png?v=4" target="_blank">
+    <img src="screenshots/wisp-mobile.png?v=4" width="400" alt="Mobile">
   </a>
   <br>
   <sub><b>Mobile</b></sub>

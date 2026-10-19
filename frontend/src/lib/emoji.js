@@ -6,7 +6,7 @@ export const EMOJI_ALIASES = new Map([
   ['😀',['grin']],['😃',['smiley']],['😄',['smile']],['😁',['beam']],['😂',['joy','laugh']],
   ['🤣',['rofl']],['😊',['blush']],['😍',['heart-eyes']],['🥰',['love-face']],['😉',['wink']],
   ['🙂',['slight-smile']],['🙃',['upside-down']],['😎',['sunglasses']],['🥳',['party']],['😭',['sob']],
-  ['😢',['cry']],['👍',['thumbsup','thumb','+1']],['👎',['thumbsdown','-1']],['👌',['ok']],
+  ['😮',['surprised','wow']],['😢',['cry']],['👍',['thumbsup','thumb','+1']],['👎',['thumbsdown','-1']],['👌',['ok']],
   ['✌️',['victory','peace']],['🤞',['fingers-crossed']],['👏',['clap']],['🙏',['pray','thanks']],
   ['💪',['muscle','strong']],['👋',['wave']],['🤝',['handshake']],['👀',['eyes']],['❤️',['heart','love']],
   ['🔥',['fire']],['🎉',['tada','celebrate']],['✅',['check','yes']],['❌',['cross','no']]
@@ -37,5 +37,5 @@ export function recentEmojis() {
 
 export function rememberEmoji(emoji) {
   const recent = [emoji, ...recentEmojis().filter(item => item !== emoji)].slice(0, 12);
-  localStorage.setItem('recentEmojis', JSON.stringify(recent));
+  try { localStorage.setItem('recentEmojis', JSON.stringify(recent)); } catch { /* Reactions still work when storage is unavailable. */ }
 }

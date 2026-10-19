@@ -19,4 +19,4 @@ test('reaction snapshots reject late responses and only update their target',()=
  assert.deepEqual(fresh[0].reactions,[]);assert.equal(fresh[1],messages[1]);
  assert.equal(applyReactionState(messages,{chat_id:'other',message_id:'m',reactions:[],version:5})[0],messages[0]);
 });
-test('picker exposes the agreed 32 emoji subset',()=>{assert.equal(new Set(ALL_EMOJIS).size,32);assert.ok(ALL_EMOJIS.includes('❤️'));assert.ok(!ALL_EMOJIS.includes('🦊'))});
+test('picker exposes the emoji subset including the quick-reaction defaults',()=>{assert.equal(new Set(ALL_EMOJIS).size,33);assert.ok(ALL_EMOJIS.includes('❤️'));assert.ok(!ALL_EMOJIS.includes('🦊'))});

@@ -2,6 +2,7 @@ import { html } from 'lit';
 
 // One local outline vocabulary; no runtime icon downloads.
 const paths = {
+  copy: 'M9 9h12v12H9zM5 15H3V3h12v2',
   newChat: 'M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-2 2v-10A8.5 8.5 0 0 1 10.5 3M18 2v8m-4-4h8',
   mute: 'M3 3l18 18M9 5a6 6 0 0 1 9 5v4l3 3H9M6 8v6l-3 3m7 4h4',
   close: 'M6 6l12 12M6 18L18 6',

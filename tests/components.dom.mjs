@@ -39,10 +39,10 @@ let chosen,reply;list.addEventListener('reaction-set',e=>chosen=e.detail);list.a
 list.querySelector('[aria-label="Reply to message"]').click();assert.equal(reply.id,'m');
 await list.openPanel('people',list.messages[0],{currentTarget:list.querySelector('.reaction-chips button')},'🦊');
 assert.ok(list.querySelector('.reaction-people').textContent.includes('Bea'));list.querySelector('.reaction-people button').click();assert.equal(chosen.emoji,'');
-await list.openPanel('picker',list.messages[0],{currentTarget:list.querySelector('[aria-label="React to message"]')});const picker=list.querySelector('wisp-emoji-picker');await picker.updateComplete;assert.equal(picker.querySelectorAll('.emoji-grid button').length,32);
+await list.openPanel('picker',list.messages[0],{currentTarget:list.querySelector('[aria-label="React to message"]')});const picker=list.querySelector('wisp-emoji-picker');await picker.updateComplete;assert.equal(picker.querySelectorAll('.emoji-grid button').length,33);
 picker.querySelector('[aria-label="thumbsup"]').click();assert.equal(chosen.emoji,'👍');assert.equal(list.menu,null);
 list.messages=[{...original,reactions:[{emoji:'👍',from_me:true}],timestamp:1790760000}];await list.updateComplete;list.setReaction(list.messages[0],'👍');assert.equal(chosen.emoji,'');
-list.sendEnabled=false;await list.updateComplete;assert.equal(list.querySelectorAll('.message-actions button').length,0);
+list.sendEnabled=false;await list.updateComplete;assert.equal(list.querySelectorAll('.message-actions button').length,1);assert.ok(list.querySelector('.message-more-action'));assert.equal(list.querySelector('[aria-label="React to message"]'),null);
 list.sendEnabled=true;
 list.messages=[{...original,deleted:true,body:'Retained original',timestamp:1790760000,reactions:[{emoji:'👍',actor_name:'Bea'}]},{...original,id:'reply',body:'Visible reply',reply:{message_id:'m',deleted:true,body:'Hidden quoted original',sender_name:'Arthur'},timestamp:1790760001}];
 await list.updateComplete;

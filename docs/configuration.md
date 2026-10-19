@@ -60,7 +60,7 @@ The message JSON contract is documented in [api-contract.md](api-contract.md).
   independently of the incoming-media setting.
 - One PNG/JPEG per outgoing image message; text/caption limit 4,000 characters.
 - Image/text/reply drafts are in browser memory and disappear on page reload.
-- Received reactions may contain any emoji; creation uses the 32-emoji subset.
+- Received reactions may contain any emoji; creation uses the 33-emoji subset (including the quick-reaction defaults).
 - There is no automatic chat/media retention policy. Monitor available disk space.
 
 ## Build version and daily release check

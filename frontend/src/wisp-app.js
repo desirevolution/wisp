@@ -463,6 +463,7 @@ function wireShell(){
   conversation?.wireMessageList($('#messages'));navigation?.wireShell();
   const once=(id,event,handler)=>{const el=$(id);if(el&&!el.dataset.shellWired){el.addEventListener(event,handler);el.dataset.shellWired='true'}};
   once('#back','click',()=>{if(state.view==='gallery'&&!state.imageViewer){if(!viewHistory.closeGallery())returnFromGallery();return}backToSelection()});
+  once('#messages','message-notice',event=>showToast(event.detail.message,event.detail.kind));
   once('#composer','image-sent',event=>followSentImage(event.detail));
   const messages=$('#messages');if(messages&&!messages.dataset.imageWired){messages.dataset.imageWired='true';messages.addEventListener('image-open',event=>openImageViewer(event.detail));for(const event of ['animationend','animationcancel'])messages.addEventListener(event,e=>{if(e.target===messages&&e.animationName==='chat-message-enter')app.classList.remove('chat-revealing')})}
   once('#settingsBtn','click',openSettings);

@@ -5,7 +5,8 @@ import { sameMessageGroup } from '../core/message-groups.js';
 import { icon } from '../lib/icons.js';
 import { mediaFrameFor, rememberMediaSize } from '../core/media-layout.js';
 import './wisp-emoji-picker.js';
-import { rememberEmoji } from '../lib/emoji.js';
+import { copyText, copyImage } from '../lib/clipboard.js';
+import { rememberEmoji, recentEmojis, EMOJI_ALIASES } from '../lib/emoji.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { dayKey, dayLabel, fmt, linkify, mediaLabel, rawId } from '../lib/utils.js';
 
@@ -19,7 +20,10 @@ export class WispMessageList extends LitElement {
   };
 
   constructor(){super();this._mediaFrames=new Map();this.messages=[];this.hasOlder=false;this.loading=false;this.hasSelection=false;this.isGroup=false;this.loadingOlder=false;this.olderError=false;this.sendEnabled=false;this.pendingReactions=new Set();this.menu=null;this.expanded=new Set();
-    this._outside=e=>{const panel=this.querySelector('.message-popover');if(this.menu&&!e.composedPath().includes(panel)&&!e.composedPath().includes(this._anchor))this.closePanel()};
+    this._pressMove=e=>{if(this._press&&(e.pointerId!==this._press.pointerId||Math.hypot(e.clientX-this._press.x,e.clientY-this._press.y)>10))this.cancelPress()};
+    this._pressEnd=()=>{this.cancelPress();if(this._heldClick)this._heldClick.until=performance.now()+800};
+    this._clickAfterHold=e=>{if(this._heldClick&&performance.now()<this._heldClick.until){e.preventDefault();e.stopImmediatePropagation();this._heldClick=null}};
+    this._outside=e=>{this._heldClick=null;if(this._press&&e.pointerId!==this._press.pointerId)this.cancelPress();const panel=this.querySelector('.message-popover');if(this.menu&&!e.composedPath().includes(panel)&&!e.composedPath().includes(this._anchor))this.closePanel()};
     this._viewportWidth=window.innerWidth;
     this._resize=()=>{
       const width=window.innerWidth, widthChanged=width!==this._viewportWidth;
@@ -28,10 +32,10 @@ export class WispMessageList extends LitElement {
       if(this.menu?.mode==='actions'&&!widthChanged)return;
       this.closePanel(false);
     };
-    this._scroll=()=>{if(this.menu?.mode!=='actions')this.closePanel(false)};
+    this._scroll=()=>{this.cancelPress();if(this.menu?.mode!=='actions')this.closePanel(false)};
   }
   createRenderRoot(){return this}
-  willUpdate(changed){if(changed.has('chatId'))this._mediaFrames.clear()}
+  willUpdate(changed){if(changed.has('chatId')){this.cancelPress();this._heldClick=null;this._mediaFrames.clear()}}
   mediaFrame(m){
     if(!this._mediaFrames.has(m.id))this._mediaFrames.set(m.id,mediaFrameFor(m));
     const frame=this._mediaFrames.get(m.id);
@@ -59,23 +63,72 @@ export class WispMessageList extends LitElement {
   }
   mediaFailed(event){const el=event.currentTarget;el.classList.add('media-failed');const label=el.parentElement?.querySelector('.media-frame-status');if(label)label.textContent='Media could not be displayed.'}
 
-  connectedCallback(){super.connectedCallback();document.addEventListener('pointerdown',this._outside);window.addEventListener('resize',this._resize);this.addEventListener('scroll',this._scroll)}
-  disconnectedCallback(){this.closePanel(false);document.removeEventListener('pointerdown',this._outside);window.removeEventListener('resize',this._resize);this.removeEventListener('scroll',this._scroll);super.disconnectedCallback()}
-  keepMenuTapTarget(event){
-    // Do not let blur reflow the message list between pointerdown and click.
-    // Focus moves into the sheet after it has opened, dismissing the keyboard then.
-    if(event.pointerType==='touch'&&document.activeElement?.matches('textarea,input,[contenteditable="true"]'))event.preventDefault();
+  connectedCallback(){super.connectedCallback();document.addEventListener('pointerdown',this._outside);window.addEventListener('resize',this._resize);this.addEventListener('scroll',this._scroll);document.addEventListener('pointermove',this._pressMove,{passive:true});document.addEventListener('pointerup',this._pressEnd);document.addEventListener('pointercancel',this._pressEnd);this.addEventListener('click',this._clickAfterHold,true)}
+  disconnectedCallback(){this.cancelPress();this._heldClick=null;this.closePanel(false);document.removeEventListener('pointermove',this._pressMove);document.removeEventListener('pointerup',this._pressEnd);document.removeEventListener('pointercancel',this._pressEnd);this.removeEventListener('click',this._clickAfterHold,true);document.removeEventListener('pointerdown',this._outside);window.removeEventListener('resize',this._resize);this.removeEventListener('scroll',this._scroll);super.disconnectedCallback()}
+  mobile(){return window.matchMedia('(max-width:700px)').matches}
+  canCopyImage(m){return ['image','sticker'].includes(m.type)&&m.has_media&&m.media_id&&m.media_status==='ready'}
+  canAct(m){return !m.deleted&&(this.sendEnabled||Boolean(m.body)||this.canCopyImage(m))}
+  cancelPress(){if(this._press)clearTimeout(this._press.timer);this._press=null}
+  startPress(event,message){
+    this.cancelPress();this._heldClick=null;
+    if(!this.mobile()||!this.canAct(message)||event.button!==0||event.isPrimary===false||event.target.closest('button,input,textarea,audio,video'))return;
+    if(document.activeElement?.matches('textarea,input,[contenteditable="true"]'))event.preventDefault();
+    const anchor=event.currentTarget;
+    this._press={pointerId:event.pointerId,x:event.clientX,y:event.clientY,timer:setTimeout(()=>{
+      this._press=null;
+      if(!anchor.isConnected||this.inert)return;
+      this._heldClick={id:message.id,until:Infinity};
+      window.getSelection()?.removeAllRanges();
+      void this.openPanel('actions',message,{currentTarget:anchor});
+    },450)};
   }
+  messageContext(event,message){
+    if(!this.mobile()||!this.canAct(message)||event.target.closest('button,input,textarea,audio,video'))return;
+    event.preventDefault();this.cancelPress();
+    this._heldClick={id:message.id,until:Infinity};
+    if(this.menu?.id!==message.id)void this.openPanel('actions',message,{currentTarget:event.currentTarget});
+  }
+  messageKey(event,message){
+    if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){
+      if(!this.canAct(message))return;
+      event.preventDefault();event.stopPropagation();void this.openPanel(this.mobile()?'actions':'more',message,event);
+    }
+  }
+  async panelView(view){if(!this.menu)return;this.menu={...this.menu,view,error:''};await this.updateComplete;this.querySelector('.message-sheet-content button:not(:disabled)')?.focus({preventScroll:true})}
+  async copyMessage(m,kind){
+    const menu=this.menu;if(!menu||menu.busy)return;
+    menu.busy=true;menu.error='';menu.download=false;this.requestUpdate();
+    try{
+      await (kind==='image'?copyImage(m):copyText(m.body));
+      if(this.menu===menu)this.closePanel();
+      if(this.isConnected)this.emit('message-notice',{message:kind==='image'?'Image copied':'Text copied',kind:'info'});
+    }catch{
+      if(this.menu!==menu)return;
+      menu.error=kind==='image'?'Could not copy the image. You can download it instead.':'Could not copy the text. Check clipboard access and try again.';
+      menu.download=kind==='image';
+    }finally{if(this.menu===menu){menu.busy=false;this.requestUpdate()}}
+  }
+  downloadImage(m){
+    const link=document.createElement('a');link.href=`/api/media/${encodeURIComponent(m.media_id)}`;link.download=m.filename||m.media_filename||`wisp-image-${m.id}`;document.body.append(link);link.click();link.remove();this.closePanel();
+  }
+  renderCopyActions(m){return html`<div class="message-copy-actions">
+    ${m.body?html`<button type="button" ?disabled=${this.menu.busy} @click=${()=>this.copyMessage(m,'text')}>${icon('copy')} Copy text</button>`:null}
+    ${this.canCopyImage(m)?html`<button type="button" ?disabled=${this.menu.busy} @click=${()=>this.copyMessage(m,'image')}>${icon('image')} Copy image</button>`:null}
+    ${!m.body&&!this.canCopyImage(m)?html`<p>No copyable content.</p>`:null}
+    ${this.menu.busy?html`<p role="status">Copying…</p>`:null}
+    ${this.menu.error?html`<p class="message-copy-error" role="alert">${this.menu.error}</p>`:null}
+    ${this.menu.download?html`<button type="button" @click=${()=>this.downloadImage(m)}>${icon('down')} Download image</button>`:null}
+  </div>`}
   emit(type,detail){this.dispatchEvent(new CustomEvent(type,{detail,bubbles:true,composed:true}))}
-  closePanel(restore=true){const panel=this.querySelector('.message-popover');if(panel?.matches(':popover-open'))panel.hidePopover();this.menu=null;if(restore&&this._anchor?.isConnected)this._anchor.focus({preventScroll:true})}
+  closePanel(restore=true){this.cancelPress();const panel=this.querySelector('.message-popover');if(panel?.matches(':popover-open'))panel.hidePopover();this.menu=null;if(restore&&this._anchor?.isConnected)this._anchor.focus({preventScroll:true})}
   async openPanel(mode,message,event,emoji=''){
     if(mode==='picker'&&(!this.sendEnabled||this.pendingReactions.has(message.id)))return;
-    const opening=!this.menu;if(opening)this._anchor=event.currentTarget;this.menu={mode,id:message.id,emoji};
+    const opening=!this.menu;if(opening)this._anchor=event.currentTarget;this.menu={mode,id:message.id,emoji,view:this.sendEnabled?'compact':'options',busy:false,error:''};
     await this.updateComplete;
-    const panel=this.querySelector('.message-popover');if(!panel)return;
+    const panel=this.querySelector('.message-popover');if(!panel||this.menu?.id!==message.id)return;
     panel.showPopover?.();
     const picker=panel.querySelector('wisp-emoji-picker');if(picker)await picker.updateComplete;
-    if(this.menu?.mode==='actions'){panel.querySelector('button:not([tabindex="-1"])')?.focus({preventScroll:true});return}
+    if(this.menu?.mode==='actions'){panel.querySelector('.message-sheet-content button:not(:disabled)')?.focus({preventScroll:true});return}
     const rect=this._anchor.getBoundingClientRect(),box=panel.getBoundingClientRect();
     const width=document.documentElement.clientWidth,height=window.visualViewport?.height || window.innerHeight;
     panel.style.left=`${Math.max(8,Math.min(rect.left,width-box.width-8))}px`;
@@ -116,18 +169,20 @@ export class WispMessageList extends LitElement {
   renderPanel(){
     if(!this.menu)return null;
     const m=this.messages.find(x=>x.id===this.menu.id);if(!m)return null;
-    const own=(m.reactions||[]).find(r=>r.from_me),sheet=this.menu.mode==='actions';
-    return html`<div class="message-popover ${sheet?'message-sheet':''}" popover="manual" role="dialog" tabindex="-1" aria-modal=${sheet?'true':nothing} aria-label=${sheet?'Message actions':this.menu.mode==='picker'?'React to message':'Reactions'} @keydown=${this.panelKey}>
+    const own=(m.reactions||[]).find(r=>r.from_me),sheet=this.menu.mode==='actions',view=this.menu.view;
+    const recent=[...new Set([...recentEmojis(),'👍','❤️','😂','😮','😢','🙏'])].slice(0,6);
+    return html`<div class="message-popover ${sheet?'message-sheet':''}" popover="manual" role="dialog" tabindex="-1" aria-modal=${sheet?'true':nothing} aria-label=${sheet||this.menu.mode==='more'?'Message actions':this.menu.mode==='picker'?'React to message':'Reactions'} @keydown=${this.panelKey}>
       ${sheet?html`
         <button class="message-sheet-backdrop" tabindex="-1" aria-label="Close message actions" @click=${()=>this.closePanel()}></button>
         <section class="message-sheet-content">
-          <div class="reaction-panel-head"><b>Message actions</b><button type="button" aria-label="Close" @click=${()=>this.closePanel()}>${icon('close')}</button></div>
+          <div class="reaction-panel-head">${view!=='compact'&&this.sendEnabled?html`<button type="button" aria-label="Back to reactions" @click=${()=>this.panelView('compact')}>${icon('back')}</button>`:nothing}<b>${view==='options'?'Message actions':'React to message'}</b><button type="button" aria-label="Close" @click=${()=>this.closePanel()}>${icon('close')}</button></div>
           <blockquote class="sheet-message-preview"><b>${m.from_me?'You':m.sender_name&&!rawId(m.sender_name)?m.sender_name:'Message'}</b><span>${m.body||mediaLabel(m.type)}</span></blockquote>
-          <div class="sheet-reactions" aria-label="Choose a reaction">${this.renderPicker(m,own)}</div>
-          <button class="sheet-reply" type="button" @click=${()=>{this.closePanel();this.emit('reply-select',{message:m})}}>${icon('reply')} Reply</button>
+          ${view==='compact'?html`<div class="quick-reactions" aria-label="Recent reactions">${recent.map(emoji=>html`<button type="button" aria-label=${(EMOJI_ALIASES.get(emoji)||[emoji])[0]} title=${emoji} aria-pressed=${own?.emoji===emoji?'true':'false'} ?disabled=${this.pendingReactions.has(m.id)} @click=${()=>this.setReaction(m,emoji)}>${emoji}</button>`)}</div><div class="sheet-navigation"><button type="button" aria-label="More emojis" @click=${()=>this.panelView('emojis')}>${icon('smile')} More emojis</button><button type="button" aria-label="More message actions" title="More actions" @click=${()=>this.panelView('options')}>${icon('more')}</button></div>`:nothing}
+          ${view==='emojis'?html`<div class="sheet-reactions" aria-label="Choose a reaction">${this.renderPicker(m,own)}</div>`:nothing}
+          ${view==='options'?html`${this.sendEnabled?html`<button class="sheet-reply" type="button" ?disabled=${this.menu.busy} @click=${()=>{this.closePanel();this.emit('reply-select',{message:m})}}>${icon('reply')} Reply</button>`:nothing}${this.renderCopyActions(m)}`:nothing}
         </section>`:html`
-        <div class="reaction-panel-head"><b>${this.menu.mode==='picker'?'React to message':`${this.menu.emoji} Reactions`}</b><button class="popover-close" type="button" aria-label="Close" @click=${()=>this.closePanel()}>${icon('close')}</button></div>
-        ${this.menu.mode==='picker'?this.renderPicker(m,own):html`<ul class="reaction-people">${(m.reactions||[]).filter(r=>r.emoji===this.menu.emoji).map(r=>html`<li><span>${r.from_me?'You':r.actor_name||'Unknown participant'}</span>${r.from_me&&this.sendEnabled?html`<button type="button" ?disabled=${this.pendingReactions.has(m.id)} @click=${()=>this.setReaction(m,'')}>Remove</button>`:null}</li>`)}</ul>`}`}
+        <div class="reaction-panel-head"><b>${this.menu.mode==='picker'?'React to message':this.menu.mode==='more'?'Message actions':`${this.menu.emoji} Reactions`}</b><button class="popover-close" type="button" aria-label="Close" @click=${()=>this.closePanel()}>${icon('close')}</button></div>
+        ${this.menu.mode==='more'?this.renderCopyActions(m):this.menu.mode==='picker'?this.renderPicker(m,own):html`<ul class="reaction-people">${(m.reactions||[]).filter(r=>r.emoji===this.menu.emoji).map(r=>html`<li><span>${r.from_me?'You':r.actor_name||'Unknown participant'}</span>${r.from_me&&this.sendEnabled?html`<button type="button" ?disabled=${this.pendingReactions.has(m.id)} @click=${()=>this.setReaction(m,'')}>Remove</button>`:null}</li>`)}</ul>`}`}
     </div>`;
   }
   _loadOlder(){this.dispatchEvent(new CustomEvent('load-older',{bubbles:true,composed:true}))}
@@ -180,17 +235,16 @@ export class WispMessageList extends LitElement {
         const inlineTime=Boolean(m.body)&&(!m.deleted||this.expanded.has(m.id));
         return html`${showDay?html`<div class="date-separator"><span>${dayLabel(m.timestamp)}</span></div>`:null}
           <div class="message-row ${m.from_me?'outgoing':''} ${grouped?'grouped':'group-start'}">
-            <div class="message-stack"><div class="bubble ${m.from_me?'me':''} ${m.has_media?'media-bubble':''} ${!m.deleted&&!m.edited&&m.has_media&&!m.body&&!m.reply?'media-only':''}" data-message-id=${m.id}>
+            <div class="message-stack"><div class="bubble ${m.from_me?'me':''} ${m.has_media?'media-bubble':''} ${!m.deleted&&!m.edited&&m.has_media&&!m.body&&!m.reply?'media-only':''}" data-message-id=${m.id} tabindex=${this.canAct(m)?'0':nothing} aria-label=${this.canAct(m)?'Message. Long press or press Shift+F10 for actions':nothing} @pointerdown=${e=>this.startPress(e,m)} @contextmenu=${e=>this.messageContext(e,m)} @keydown=${e=>this.messageKey(e,m)}>
               ${this.isGroup&&!grouped&&!m.from_me&&m.sender_name&&!rawId(m.sender_name)?html`<div class="sender">${m.sender_name}</div>`:null}
               ${m.deleted?html`<div class="deleted-label">Message deleted</div>${m.type!=='deleted'?html`<button class="deleted-toggle" aria-expanded=${this.expanded.has(m.id)} @click=${()=>this.toggleDeleted(m.id)}>${this.expanded.has(m.id)?'Hide deleted message':'Show deleted message'}</button>`:null}`:null}
               ${!m.deleted||this.expanded.has(m.id)?html`${m.reply?this.quote(m.reply,`quote:${m.id}`):null}${this._media(m)}${m.body?html`<div class="body"><span class="message-text">${unsafeHTML(linkify(m.body))}</span>${this.timestamp(m,true)}</div>`:null}${this.editHistory(m)}`:null}
               ${!inlineTime?this.timestamp(m):null}
             </div>
             ${!m.deleted||this.expanded.has(m.id)?this.reactionChips(m):null}</div>
-            ${this.sendEnabled&&!m.deleted?html`<div class="message-actions">
-              <button type="button" aria-label="Reply to message" class="desktop-message-action" title="Reply" @click=${()=>this.emit('reply-select',{message:m})}>${icon('reply')}</button>
-              <button type="button" class="reaction-action desktop-message-action" aria-label="React to message" title="Add reaction" ?disabled=${this.pendingReactions.has(m.id)} @click=${e=>this.openPanel('picker',m,e)}>${icon('smile')}</button>
-              <button class="mobile-menu-action" type="button" aria-label="Message actions" title="Message actions" aria-haspopup="dialog" aria-expanded=${this.menu?.id===m.id} @pointerdown=${this.keepMenuTapTarget} @click=${e=>this.openPanel('actions',m,e)}>${icon('more')}</button>
+            ${this.canAct(m)?html`<div class="message-actions">
+              ${this.sendEnabled?html`<button type="button" class="reaction-action desktop-message-action" aria-label="React to message" title="Add reaction" ?disabled=${this.pendingReactions.has(m.id)} @click=${e=>this.openPanel('picker',m,e)}>${icon('smile')}</button><button type="button" aria-label="Reply to message" class="desktop-message-action" title="Reply" @click=${()=>this.emit('reply-select',{message:m})}>${icon('reply')}</button>`:nothing}
+              <button class="desktop-message-action message-more-action" type="button" aria-label="Message actions" title="Message actions" aria-haspopup="dialog" aria-expanded=${this.menu?.id===m.id&&this.menu?.mode==='more'} @click=${e=>this.openPanel('more',m,e)}>${icon('more')}</button>
             </div>`:null}
           </div>`;
       })}

@@ -351,7 +351,6 @@ wisp-composer{display:block;grid-row:3;min-width:0}
 .message-row.grouped{margin-top:-6px}
 .message-row.grouped .bubble{border-top-left-radius:4px}
 .message-row.outgoing.grouped .bubble{border-top-left-radius:8px;border-top-right-radius:4px}
-.message-actions .mobile-menu-action{display:none}
 .message-actions .desktop-message-action{display:inline-flex}
 .message-actions{align-self:center;grid-row:1;opacity:0}
 .message-row:hover .message-actions,.message-row:focus-within .message-actions{opacity:1}
@@ -382,16 +381,11 @@ wisp-composer{display:block;grid-row:3;min-width:0}
   .message-row.outgoing{grid-template-columns:max-content fit-content(calc(100% - 45px))}
   .message-actions{opacity:1}
   .message-actions .desktop-message-action{display:none}
-  .message-actions .mobile-menu-action{display:inline-flex;width:40px;height:44px}
   .composer textarea{font-size:16px}
   .emoji-btn,.send-btn,.image-btn{width:40px;min-height:44px}
 }
-/* Touch laptops use the same explicit menu as phones. */
-@media(min-width:701px) and (hover:none){
-  .message-actions{opacity:1}
-  .message-actions .desktop-message-action{display:none}
-  .message-actions .mobile-menu-action{display:inline-flex;width:44px;height:44px}
-}
+/* Keep desktop controls discoverable on touch laptops. */
+@media(min-width:701px) and (hover:none){.message-actions{opacity:1}}
 /* Explicit hidden state wins over responsive display rules. */
 #app [hidden]{display:none!important}
 
@@ -521,3 +515,33 @@ dialog.chat-controls::backdrop{background:#0009}
  .chat-controls-popup .chat-menu-actions>button:hover{background:#2a3942}
  .chat-controls-popup p{padding:8px;margin:0;font-size:13px}
 }
+
+/* Mirror desktop actions so reactions stay nearest to either message edge. */
+@media(min-width:701px){
+ .message-row{grid-template-columns:fit-content(min(78%,calc(100% - 106px))) max-content}
+ .message-row.outgoing{grid-template-columns:max-content fit-content(min(78%,calc(100% - 106px)))}
+ .message-row.outgoing .message-actions{flex-direction:row-reverse}
+ .message-actions .desktop-message-action{display:inline-flex}
+}
+.message-copy-actions{display:grid;gap:4px;min-height:0;overflow:auto}
+.message-copy-actions>button,.sheet-navigation>button{display:flex;align-items:center;gap:12px;min-height:44px;padding:10px 12px;border:0;border-radius:7px;background:transparent;color:#e9edef;font:inherit;text-align:left;cursor:pointer}
+.message-copy-actions>button:hover,.sheet-navigation>button:hover{background:#2a3942}
+.message-copy-actions>button:disabled{opacity:.5;cursor:wait}
+.message-copy-actions p{margin:8px;line-height:1.4;color:#c6d4dc;overflow-wrap:anywhere}
+.message-copy-actions .message-copy-error{color:#ffb4ab}
+.quick-reactions{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px}
+.quick-reactions button{display:grid;place-items:center;min-width:0;min-height:44px;padding:4px;border:0;border-radius:9px;background:transparent;color:#e9edef;font:inherit;font-size:26px;cursor:pointer}
+.quick-reactions button:hover,.quick-reactions button[aria-pressed="true"]{background:#125d4c}
+.quick-reactions button:disabled{opacity:.5;cursor:wait}
+.sheet-navigation{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
+.sheet-navigation>button:first-child{flex:1}
+.message-sheet-content .reaction-panel-head b{flex:1}
+.message-sheet-content .message-copy-actions{flex:1}
+@media(max-width:700px){
+ .message-row,.message-row.outgoing{grid-template-columns:fit-content(92%)}
+ .message-row.outgoing .message-stack>.bubble,.message-row.outgoing .reaction-chips{grid-column:1}
+ .message-row .message-actions{display:none}
+ .bubble{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:pan-y pinch-zoom}
+ .bubble img,.bubble a{-webkit-touch-callout:none;-webkit-user-drag:none}
+}
+.quick-reactions button{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;font-variant-emoji:emoji}

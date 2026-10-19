@@ -8,7 +8,7 @@
     "build": "vite build --config frontend/vite.config.js",
     "test": "node --test tests/*.test.js",
     "test:dom": "node scripts/test-dom.mjs",
-    "test:browser": "node tests/browser-context.spec.mjs && node tests/browser-chat-controls.spec.mjs",
+    "test:browser": "node tests/browser-context.spec.mjs && node tests/browser-chat-controls.spec.mjs && node tests/browser-message-actions.spec.mjs",
     "check": "./scripts/check.sh",
     "screenshots": "npm run build && node tests/demo-screenshots.mjs"
   },

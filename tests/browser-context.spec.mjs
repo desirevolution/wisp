@@ -80,7 +80,7 @@ try{
  failSend=false;await page.locator('#sendBtn').click();await page.waitForFunction(()=>document.querySelector('#composerInput').value==='');assert.equal(sent.at(-1).reply_to,'m1');assert.equal(await page.locator('.reply-draft').count(),0);
  await row('m1').hover();await row('m1').getByRole('button',{name:'React to message',exact:true}).click();await page.locator('.message-popover:popover-open').waitFor();
  assert.equal(await page.locator('.message-popover .popover-close').isVisible(),false);
- assert.equal(await page.locator('.message-popover .emoji-grid button').count(),32);
+ assert.equal(await page.locator('.message-popover .emoji-grid button').count(),33);
  await page.locator('#conversationTitle').click();await page.waitForFunction(()=>!document.querySelector('.message-popover'));
  await row('m1').hover();await row('m1').getByRole('button',{name:'React to message',exact:true}).click();await page.locator('.message-popover:popover-open').waitFor();
  await page.locator('.message-popover').getByRole('button',{name:'thumbsup',exact:true}).click();await row('m1').locator('.reaction-chips').waitFor();assert.equal(reacted.at(-1).emoji,'👍');
@@ -181,8 +181,18 @@ try{
  assert.deepEqual(errors,[]);await context.close();console.log('Desktop: reply, image drafts/send/failure, reactions, context and layout checks passed');
  const mobile=await pageFor({viewport:{width:390,height:844},isMobile:true,hasTouch:true,deviceScaleFactor:1});
  const mr=mobile.page.locator('[data-message-id="m3"]').locator('..').locator('..');
- assert.equal(await mr.locator('.message-actions').evaluate(el=>getComputedStyle(el).opacity),'1');
- await mr.getByRole('button',{name:'Message actions',exact:true}).click();await mobile.page.locator('.message-sheet:popover-open').waitFor();
+ const hold=async(page,row)=>{
+  await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('chat-preparing')&&!document.querySelector('#app').classList.contains('chat-revealing'));
+  const target=row.locator('.message-text').last();await target.scrollIntoViewIfNeeded();const box=await target.boundingBox();
+  const touch=await page.context().newCDPSession(page);
+  await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2}]});
+  await page.waitForTimeout(520);
+  await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await touch.detach();
+  await page.locator('.message-sheet:popover-open').waitFor();
+ };
+
+ assert.equal(await mr.locator('.message-actions').isVisible(),false);
+ await hold(mobile.page,mr);await mobile.page.locator('.message-sheet:popover-open').waitFor();
  const box=await mobile.page.locator('.message-sheet-content').boundingBox();assert.ok(box.x>=0&&box.y>=0&&box.x+box.width<=390&&Math.abs(box.y+box.height-844)<2,JSON.stringify(box));
  assert.ok((await mobile.page.locator('.sheet-message-preview').textContent()).includes('Antwort mit nicht verfügbarem Original'));
  assert.equal(await mobile.page.getByRole('button',{name:'React',exact:true}).count(),0);
@@ -190,9 +200,10 @@ try{
  // Reactions are one tap away; clicking the selected reaction again removes it.
  await mobile.page.locator('.message-sheet').getByRole('button',{name:'thumbsup',exact:true}).last().click();
  await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));assert.equal(reacted.at(-1).emoji,'👍');
- await mr.getByRole('button',{name:'Message actions',exact:true}).click();await mobile.page.locator('.message-sheet button[aria-pressed="true"]').last().click();
+ await hold(mobile.page,mr);await mobile.page.locator('.message-sheet button[aria-pressed="true"]').last().click();
  await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));assert.equal(reacted.at(-1).emoji,'');
- await mr.getByRole('button',{name:'Message actions',exact:true}).click();
+ await hold(mobile.page,mr);
+ await mobile.page.getByRole('button',{name:'More message actions',exact:true}).click();
  await mobile.page.getByRole('button',{name:'Reply',exact:true}).click();
  await mobile.page.locator('.reply-draft').waitFor();assert.equal(await mobile.page.locator('.message-sheet').count(),0);
  await mobile.page.locator('#emojiBtn').click();await mobile.page.locator('#emojiPicker:not([hidden])').waitFor();
@@ -203,19 +214,19 @@ try{
  await mobile.page.locator('#mediaBtn').click();await mobile.page.locator('#gallery').waitFor();await mobile.page.goBack();await mobile.page.locator('#composerInput').waitFor();
  const mobileHistoryAfterGallery=await mobile.page.evaluate(()=>history.length);
  await mobile.page.locator('#composerInput').press('Escape');
- await mr.getByRole('button',{name:'Message actions',exact:true}).click();
+ await hold(mobile.page,mr);
  await mobile.page.locator('.message-sheet-backdrop').click({position:{x:5,y:5}});await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));
- await mr.getByRole('button',{name:'Message actions',exact:true}).click();
+ await hold(mobile.page,mr);
 
  await mobile.page.locator('.message-popover').press('Escape');
  await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));
  await mobile.page.locator('#composerInput').fill('Mobile line');await mobile.page.locator('#composerInput').press('Enter');
  assert.equal(await mobile.page.locator('#composerInput').inputValue(),'Mobile line\n');
- // A touch with the editor focused must open the sheet on the first tap.
+ // A long press with the editor focused opens the sheet on the first hold.
  // Simulate the viewport expansion/scroll that a software keyboard causes;
  // browser emulation does not provide an actual Android keyboard.
  await mobile.page.locator('#composerInput').focus();
- await mr.getByRole('button',{name:'Message actions',exact:true}).tap();
+ await hold(mobile.page,mr);
  await mobile.page.locator('.message-sheet:popover-open').waitFor();
  await mobile.page.evaluate(()=>{window.dispatchEvent(new Event('resize'));document.querySelector('#messages').dispatchEvent(new Event('scroll'))});
  await mobile.page.locator('.message-sheet:popover-open').waitFor();
@@ -260,7 +271,7 @@ try{
  assert.equal(await mobile.page.locator('#composerInput').inputValue(),'');
  console.log(`Camera photo: ${cameraBytes.length} -> ${optimizedSize} bytes; 3200x2400 -> 2048x1536; held send remains visible`);
  await mobile.page.locator('#composerInput').fill('Mobile line\n');
- await mr.getByRole('button',{name:'Message actions',exact:true}).click();await mobile.page.locator('.message-popover').waitFor();
+ await hold(mobile.page,mr);await mobile.page.locator('.message-popover').waitFor();
  await mobile.page.locator('.message-sheet').getByRole('button',{name:'Close',exact:true}).click();await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));
  assert.equal(await mobile.page.evaluate(()=>history.length),mobileHistoryAfterGallery,'Message actions must not add history entries');
  assert.equal(await mobile.page.evaluate(()=>history.state.view),'chat');
@@ -270,12 +281,13 @@ try{
  await mobile.page.getByRole('button',{name:'Back to chats',exact:true}).click();await mobile.page.locator('.sidebar').waitFor();
  await mobile.page.locator(`[data-id="${chat}"]`).click();
  await mobile.page.setViewportSize({width:320,height:480});
- await mr.getByRole('button',{name:'Message actions',exact:true}).click();await mobile.page.locator('.message-sheet-content').waitFor();
+ await hold(mobile.page,mr);await mobile.page.locator('.message-sheet-content').waitFor();
  const smallBox=await mobile.page.locator('.message-sheet-content').boundingBox();assert.ok(smallBox.x>=0&&smallBox.y>=0&&smallBox.x+smallBox.width<=320&&smallBox.y+smallBox.height<=481);
+ await mobile.page.getByRole('button',{name:'More message actions',exact:true}).click();
  const replyBox=await mobile.page.getByRole('button',{name:'Reply',exact:true}).boundingBox();assert.ok(replyBox.y>=0&&replyBox.y+replyBox.height<=480);
  await mobile.page.locator('.message-sheet').press('Escape');
  assert.deepEqual(mobile.errors,[]);await mobile.context.close();console.log('Mobile: bottom sheet, preview, direct reactions/removal, reply, backdrop/Escape/Close, direct Back-to-chats and Enter passed');
- mirror=true;const readonly=await pageFor({viewport:{width:1100,height:800}});assert.equal(await readonly.page.locator('.message-actions').count(),0);assert.equal(await readonly.page.locator('#composer').isVisible(),false);await readonly.context.close();console.log('Mirror mode: send actions hidden');
+ mirror=true;const readonly=await pageFor({viewport:{width:1100,height:800}});assert.ok(await readonly.page.locator('.message-more-action').count()>0);assert.equal(await readonly.page.locator('[aria-label="Reply to message"],[aria-label="React to message"]').count(),0);assert.equal(await readonly.page.locator('#composer').isVisible(),false);await readonly.context.close();console.log('Mirror mode: send actions hidden');
 
  }
  // Browser/PWA navigation: overview -> chat -> image, without raw-media
