@@ -3,7 +3,7 @@
 export function createViewHistory({ win = window, onChange }) {
   const marker='wisp-view-v1';
   const overview=()=>({wispView:marker,view:'overview'});
-  const valid=s=>s?.wispView===marker&&['overview','chat','image'].includes(s.view);
+  const valid=s=>s?.wispView===marker&&['overview','chat','gallery','image'].includes(s.view);
   const current=()=>valid(win.history.state)?win.history.state:overview();
   if(!valid(win.history.state))win.history.replaceState(overview(),'');
   let pendingChat=null;
@@ -20,7 +20,7 @@ export function createViewHistory({ win = window, onChange }) {
     openChat(chatId,{preserveImage=false}={}){
       const previous=current();
       if(preserveImage&&previous.overlay&&previous.chatId===chatId)return;
-      if(previous.view==='image'){
+      if(previous.view==='image'||previous.view==='gallery'){
         if(preserveImage&&previous.chatId===chatId)return;
         pendingChat=chatId;win.history.back();return;
       }
@@ -28,6 +28,12 @@ export function createViewHistory({ win = window, onChange }) {
       if(previous.view==='overview')win.history.pushState(next,'');
       else win.history.replaceState(next,'');
     },
+    openGallery(chatId,kind='media'){
+      const next={wispView:marker,view:'gallery',chatId,kind};
+      if(current().view==='gallery')win.history.replaceState(next,'');
+      else win.history.pushState(next,'');
+    },
+    closeGallery(){if(current().view==='gallery'){win.history.back();return true}return false},
     openImage(image,chatId){
       const next={wispView:marker,view:'image',chatId,image};
       if(current().view==='image')win.history.replaceState(next,'');
@@ -37,7 +43,7 @@ export function createViewHistory({ win = window, onChange }) {
     toOverview(){
       const view=current().view;
       if(view==='overview')return false;
-      win.history.go(view==='image'?-2:-1);return true;
+      win.history.go(['image','gallery'].includes(view)?-2:-1);return true;
     },
     destroy(){win.removeEventListener('popstate',pop)}
   };

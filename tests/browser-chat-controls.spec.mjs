@@ -65,6 +65,25 @@ try{
  const menu=async(page)=>{await page.getByRole('button',{name:'Chat menu',exact:true}).click();await page.locator('dialog[open]').waitFor()};
  const closeChat=async(page)=>{await menu(page);await page.getByRole('button',{name:'Close chat…',exact:true}).click();await page.getByRole('button',{name:'Close chat',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('dialog[open]'));await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('open'))};
  const choose=async(page,name)=>{await page.getByRole('button',{name:'New chat',exact:true}).click();await page.getByRole('searchbox',{name:'Search chats and contacts'}).fill(name);await page.locator('.chat-option').filter({hasText:name}).click();await page.locator('#composerInput').waitFor();await page.waitForFunction(()=>document.querySelector('#chatPicker').hidden)};
+ // Desktop actions are anchored, non-modal and support keyboard and outside dismissal.
+ await menu(a);
+ const popup=await a.locator('dialog[open]').boundingBox(),anchor=await a.locator('#chatMenuBtn').boundingBox();
+ assert.ok(Math.abs(popup.x+popup.width-anchor.x-anchor.width)<2&&popup.y>=anchor.y+anchor.height&&popup.y<anchor.y+anchor.height+12,JSON.stringify({popup,anchor}));
+ assert.equal(await a.locator('dialog').evaluate(el=>el.matches(':modal')),false);
+ assert.equal(await a.locator('#chatMenuBtn').getAttribute('aria-expanded'),'true');
+ await a.waitForFunction(()=>document.activeElement?.matches('.chat-menu-actions button'));await a.keyboard.press('ArrowDown');assert.equal(await a.evaluate(()=>document.activeElement.textContent),'Close chat…');
+ await a.keyboard.press('Home');assert.equal(await a.evaluate(()=>document.activeElement.textContent),'Mute chat…');
+ await a.keyboard.press('Enter');await a.getByRole('button',{name:'8 hours',exact:true}).waitFor();
+ assert.equal(await a.locator('dialog').evaluate(el=>el.matches(':modal')),false);
+ await a.getByRole('button',{name:'Back to chat menu'}).click();await a.getByRole('button',{name:'Close chat…',exact:true}).click();
+ assert.equal(await a.locator('dialog').evaluate(el=>el.matches(':modal')),true);
+ await a.keyboard.press('Escape');await a.waitForFunction(()=>!document.querySelector('dialog[open]'));
+ await menu(a);await a.locator('#composerInput').click();await a.waitForFunction(()=>!document.querySelector('dialog[open]'));
+ assert.equal(await a.locator('#chatMenuBtn').getAttribute('aria-expanded'),'false');
+ await menu(a);await a.setViewportSize({width:390,height:850});await a.waitForFunction(()=>document.querySelector('dialog')?.matches(':modal'));
+ await a.setViewportSize({width:1200,height:850});await a.waitForFunction(()=>!document.querySelector('dialog')?.matches(':modal'));
+ if(process.env.WISP_CHAT_QA)await a.screenshot({path:process.env.WISP_CHAT_QA.replace('.png','-menu.png')});
+ await a.keyboard.press('Escape');await a.waitForFunction(()=>!document.querySelector('dialog[open]'));
  // Browser Back dismisses the dialog before leaving the chat.
  await menu(a);await a.goBack();await a.waitForFunction(()=>!document.querySelector('dialog[open]'));assert.equal(await a.locator('#conversationTitle').textContent(),'Family');
  await a.goForward();await a.locator('dialog[open]').waitFor();await a.reload();await a.locator('dialog[open]').waitFor();await a.goBack();await a.waitForFunction(()=>!document.querySelector('dialog[open]'));assert.equal(await a.locator('#conversationTitle').textContent(),'Family');

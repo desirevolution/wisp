@@ -90,6 +90,16 @@ function backToSelection(fromHistory=false){
   requestAnimationFrame(()=>{if(state.selectedChatId||app.classList.contains('open'))return;const chat=[...app.querySelectorAll('#chatList .chat')].find(el=>el.dataset.id===previous);(chat||$('#settingsBtn'))?.focus({preventScroll:true})});
 }
 
+function returnFromGallery(){
+  gallery.cancel();state.view='chat';renderShell();
+  const chatId=state.selectedChatId,saved=chatPositions.get(chatId);
+  void $('#messages')?.updateComplete.then(()=>{
+    if(state.view!=='chat'||state.imageViewer||state.selectedChatId!==chatId||state.chatPreparing)return;
+    if(saved?.bottom)conversation.scrollBottom({initial:true});else if(saved?.anchor)conversation.restoreScrollAnchor(saved.anchor);
+    $('#mediaBtn')?.focus({preventScroll:true});
+  });
+}
+
 function connectionLabel(){if(state.connection.state==='connected'&&state.connection.syncing)return state.connection.syncPhase==='importing_history'?'Syncing chats…':state.connection.syncPhase==='settling_history'?'Finishing sync…':state.connection.syncPhase==='checking_history'?'Checking history…':'Syncing…';return({starting:'Starting…',disconnecting:'Disconnecting…',reconnecting:'Reconnecting…',waiting_for_qr:'Waiting for QR scan',authenticating:'Signing in…',connected:'Connected',disconnected:'Disconnected',error:'Connection error'}[state.connection.state]||state.connection.state)}
 async function loadStatus({render=true}={}){const x=await apiJson('/api/status');state.version=x.version||'dev';state.update=x.update;state.connection=x.whatsapp;state.sendEnabled=Boolean(x.send?.enabled);if(Array.isArray(x.chat_states))for(const p of x.chat_states)applyChatState(p);scheduleMuteRefresh();if(render)renderShell()}
 async function loadConfig(){const x=await apiJson('/api/config');state.sendEnabled=Boolean(x.sendEnabled);state.mirrorOnly=Boolean(x.mirrorOnly);state.followNewMessages=Boolean(x.followNewMessages);}
@@ -354,7 +364,7 @@ function renderShell({refreshMessages=true}={}){
     </aside>
     <div id="sidebarResize" class="sidebar-resize" role="separator" tabindex="0" aria-label="Chat list width" aria-orientation="vertical" title="Resize chat list (arrow keys)" ?hidden=${paused}></div>
     <main class=${state.imageViewer?'conversation image-open':'conversation'} ?hidden=${initialSetup}>
-      <div class="conversation-top top"><button class="back" id="back" aria-label=${state.imageViewer?'Back to chat':'Back to chats'} title=${state.imageViewer?'Back to chat':'Back to chats'} ?hidden=${paused||!state.selectedChatId}>${icon('back')}</button><div class="conversation-heading"><h2 id="conversationTitle">Messages</h2><span id="headerMuted" class="chat-muted" hidden>${icon('mute')}</span></div><button class="icon-btn media-btn" id="mediaBtn" aria-label="Media, links and documents" title="Media, links and documents" ?disabled=${state.chatPreparing} ?hidden=${paused||!state.selectedChatId}>${icon('grid')}</button><button id="chatMenuBtn" class="icon-btn" aria-label="Chat menu" title="Chat menu" ?hidden=${paused||!state.selectedChatId} @pointerdown=${e=>{if(document.activeElement?.matches('textarea'))e.preventDefault()}} @click=${()=>showChatControls('menu')}>${icon('more')}</button></div>
+      <div class="conversation-top top"><button class="back" id="back" aria-label=${state.imageViewer||state.view==='gallery'?'Back to chat':'Back to chats'} title=${state.imageViewer||state.view==='gallery'?'Back to chat':'Back to chats'} ?hidden=${paused||!state.selectedChatId}>${icon('back')}</button><div class="conversation-heading"><h2 id="conversationTitle">Messages</h2><span id="headerMuted" class="chat-muted" hidden>${icon('mute')}</span></div><button class="icon-btn media-btn" id="mediaBtn" aria-label="Media, links and documents" title="Media, links and documents" ?disabled=${state.chatPreparing} ?hidden=${paused||!state.selectedChatId}>${icon('grid')}</button><button id="chatMenuBtn" class="icon-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Chat menu" title="Chat menu" ?hidden=${paused||!state.selectedChatId} @pointerdown=${e=>{if(document.activeElement?.matches('textarea'))e.preventDefault()}} @click=${()=>$('#chatControls')?.mode?void closeChatControls():showChatControls('menu')}>${icon('more')}</button></div>
       <wisp-message-list id="messages" class="messages" .inert=${state.chatPreparing||Boolean(state.imageViewer)} aria-busy=${state.chatPreparing?'true':'false'} ?hidden=${paused||state.view!=='chat'}></wisp-message-list>
       <div id="chatLoading" class="chat-loading" role="status" aria-live="polite" ?hidden=${!state.chatPreparing||paused||state.view!=='chat'}>${state.chatLoadError?html`<div><b>Could not load messages</b><p>${state.chatLoadError}</p><button @click=${()=>selectChat(state.selectedChatId)}>Try again</button></div>`:html`<span>Loading messages…</span>`}</div>
       <wisp-gallery id="gallery" class="messages" ?hidden=${paused||state.view!=='gallery'}></wisp-gallery>
@@ -438,7 +448,7 @@ function openImageViewer(image,{history=true}={}){
   state.imageViewer=image;renderShell({refreshMessages:false});
   $('#back')?.focus({preventScroll:true});
 }
-function focusComposer(){if(state.chatPreparing||!state.sendEnabled||!state.selectedChatId||state.view!=='chat'||!window.matchMedia('(min-width: 701px)').matches||state.settingsOpen)return;state.activePane='right';state.keyboardNavActive=false;requestAnimationFrame(()=>{$('#composer')?.focusInput();navigation?.updateKeyboardModeIndicator();navigation?.updateActivePane()})}
+function focusComposer(){if(state.chatPreparing||!state.sendEnabled||!state.selectedChatId||state.view!=='chat'||!window.matchMedia('(min-width: 701px)').matches||state.settingsOpen)return;state.activePane='right';state.keyboardNavActive=false;requestAnimationFrame(()=>{if(state.view!=='chat'||state.chatPreparing||state.chatPickerOpen||state.settingsOpen||state.imageViewer||$('#chatControls')?.mode||document.querySelector('dialog[open]'))return;$('#composer')?.focusInput();navigation?.updateKeyboardModeIndicator();navigation?.updateActivePane()})}
 function wireComposer(){const composer=$('#composer');if(!composer)return;composer.chatId=state.selectedChatId;composer.blocked=state.chatPreparing;composer.requestUpdate()}
 function syncConnection(){const el=$('#connectionView');if(el){el.status=state.connection;el.requestUpdate()}}
 function syncSettings(){const el=$('#settings');if(!el)return;el.version=state.version;el.releaseUpdate=state.update;el.status=state.connection;el.followNewMessages=state.followNewMessages;el.mirrorOnly=state.mirrorOnly;el.pushEnabled=state.pushEnabled;el.installAvailable=Boolean(state.installPrompt);el.standalone=state.isStandalone;el.requestUpdate()}
@@ -450,12 +460,12 @@ function reconnectWhatsApp(){state.connection={...state.connection,state:'reconn
 function wireShell(){
   conversation?.wireMessageList($('#messages'));navigation?.wireShell();
   const once=(id,event,handler)=>{const el=$(id);if(el&&!el.dataset.shellWired){el.addEventListener(event,handler);el.dataset.shellWired='true'}};
-  once('#back','click',()=>backToSelection());
+  once('#back','click',()=>{if(state.view==='gallery'&&!state.imageViewer){if(!viewHistory.closeGallery())returnFromGallery();return}backToSelection()});
   once('#composer','image-sent',event=>followSentImage(event.detail));
   const messages=$('#messages');if(messages&&!messages.dataset.imageWired){messages.dataset.imageWired='true';messages.addEventListener('image-open',event=>openImageViewer(event.detail))}
   once('#settingsBtn','click',openSettings);
   once('#newMessages','click',()=>conversation.scrollBottom());
-  once('#mediaBtn','click',()=>gallery.open('media'));
+  once('#mediaBtn','click',()=>{rememberPosition();$('#messages')?.closePanel(false);$('#composer')?.closePicker();return gallery.open('media')});
   once('#connectionView','connection-reconnect',reconnectWhatsApp);
   const handle=$('#sidebarResize');if(handle&&!handle.dataset.wired){handle.dataset.wired='true';installSidebarResize(app,handle)}
   wireSettings($('#settings'));wireComposer();
@@ -467,10 +477,10 @@ async function handleLaunchTarget(){
   const q=new URLSearchParams(location.search),chat=q.get('chat'),message=q.get('message');
   if(chat){history.replaceState(history.state,'',location.pathname);if(message)await openMessage(chat,message);else await selectChat(chat);return}
   const saved=viewHistory.current();
-  if(saved.chatId){await selectChat(saved.chatId,{restore:true});if(saved.view==='image'&&saved.image)openImageViewer(saved.image,{history:false})}
+  if(saved.chatId){await selectChat(saved.chatId,{restore:true});if(saved.view==='image'&&saved.image)openImageViewer(saved.image,{history:false});if(saved.view==='gallery')await gallery.open(saved.kind,{history:false})}
 }
 conversation=createConversation({app,store,apiJson,onRetryMedia:retryMedia,onReply:selectReply,onReaction:setReaction,onQuote:openQuote});
-gallery=createGallery({app,store,apiJson,onViewChange:renderShell,openMessage});
+gallery=createGallery({app,store,apiJson,onViewChange:renderShell,onOpen:kind=>viewHistory.openGallery(state.selectedChatId,kind),openMessage});
 navigation=createNavigation({app,store,selectChat,openMessage,focusComposer,onError:message=>showToast(message)});
 viewHistory=createViewHistory({onChange:async target=>{
   if(target.overlay!=='new')hideChatPicker();
@@ -480,6 +490,8 @@ viewHistory=createViewHistory({onChange:async target=>{
   dismissImageViewer();
   if(state.selectedChatId!==target.chatId)await selectChat(target.chatId,{restore:true});
   if(viewHistory.current().chatId!==target.chatId||viewHistory.current().view!==target.view)return;
+  if(target.view==='gallery')await gallery.open(target.kind,{history:false});
+  else if(state.view==='gallery')returnFromGallery();
   if(target.view==='image'&&target.image)openImageViewer(target.image,{history:false});
   if(overlay)showChatControls(overlay);
 }});
@@ -546,7 +558,22 @@ async function init(){
     renderShell();
   }
 }
-app.addEventListener('keydown',event=>{if(state.chatPickerOpen&&(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='f'){event.preventDefault();const input=$('#chatPicker input');input?.focus();input?.select();return}if(state.chatPickerOpen&&event.key==='Escape'&&!event.defaultPrevented&&!document.querySelector('dialog[open]')){event.preventDefault();event.stopPropagation();void closeChatControls();return}if(state.imageViewer&&!state.chatPickerOpen&&!state.settingsOpen&&!document.querySelector('dialog[open]')&&event.key==='Escape'){event.preventDefault();event.stopPropagation();closeImageViewer()}});
+app.addEventListener('keydown',event=>{
+  if(state.chatPickerOpen&&(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='f'){
+    event.preventDefault();const input=$('#chatPicker input');input?.focus();input?.select();return;
+  }
+  if(state.chatPickerOpen&&event.key==='Escape'&&!event.defaultPrevented&&!document.querySelector('dialog[open]')){
+    event.preventDefault();event.stopPropagation();void closeChatControls();
+  }
+});
+// Clicking nonfocusable image content can move focus to body, outside #app.
+// Capture Escape before sidebar shortcuts consume it, while letting overlays
+// handle their own Escape before the image underneath them.
+document.addEventListener('keydown',event=>{
+  if(event.key!=='Escape'||event.defaultPrevented||event.isComposing||event.repeat||!state.imageViewer||state.connection.state!=='connected')return;
+  if(state.chatPickerOpen||state.settingsOpen||document.querySelector('dialog[open]')||$('#messages')?.menu)return;
+  event.preventDefault();event.stopPropagation();closeImageViewer();
+},true);
 app.addEventListener('viewport-layout', () => conversation?.updateNewButton());
 await init();
 app.addEventListener('composer-resize',()=>conversation.updateNewButton());

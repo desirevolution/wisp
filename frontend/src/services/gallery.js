@@ -1,4 +1,4 @@
-export function createGallery({ app, store, apiJson, openMessage, onViewChange = () => {} }) {
+export function createGallery({ app, store, apiJson, openMessage, onViewChange = () => {}, onOpen = () => {} }) {
   const state = new Proxy({}, {
     get: (_, key) => store.get(key),
     set: (_, key, value) => { store.set(key, value); return true; },
@@ -29,12 +29,13 @@ export function createGallery({ app, store, apiJson, openMessage, onViewChange =
     return el;
   }
 
-  async function open(kind = state.galleryKind || 'media') {
+  async function open(kind = state.galleryKind || 'media', { history = true } = {}) {
     if (!state.selectedChatId) return;
     const changed=state.view!=='gallery';
     state.view = 'gallery';
-    if(changed)onViewChange();
     state.galleryKind = kind;
+    if(history)onOpen(kind);
+    if(changed)onViewChange();
     const token = ++requestToken;
     await render({ loading: true });
     const chatId = state.selectedChatId;

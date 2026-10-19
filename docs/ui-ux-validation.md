@@ -249,3 +249,28 @@ on mobile. Browser coverage checks that the current desktop chat remains usable,
 responsive resizing keeps the current search, and there is no open dialog.
 It also checks mobile Back/Forward/reload restoration, keyboard arrows/Enter,
 Escape cancellation, and a single chat history entry after selecting a result.
+
+
+Image-page Escape regression: browser tests click the image and its background,
+explicitly blur focus to body, and focus the desktop sidebar search before
+pressing Escape with the real keyboard API. Each returns to the same chat.
+A chat-action dialog or new-chat picker closes first and leaves the underlying
+image open until the next Escape. This covers focus outside the #app subtree;
+forcing focus onto the header Back button alone is insufficient.
+
+
+Desktop chat actions now use a nonmodal popup aligned below the header menu
+button, including mute durations and a return action within the popup. Close
+confirmation stays modal; mobile retains bottom sheets. Browser checks cover
+anchor bounds, modal/nonmodal state, keyboard arrows/Home/Enter/Escape, outside
+click, expanded state, responsive switching and Back/Forward/reload. Existing
+image Escape priority and two-device mute/close checks remain in the suite.
+
+
+Media navigation regression: the header Back action returns from the gallery to
+the same chat, preserving drafts and replies. Gallery tabs share one browser
+history entry; Back, Forward and reload restore the chat/gallery and active tab.
+Desktop and mobile browser tests cover the header and browser Back paths.
+Composer Escape tests open the emoji picker through its button, then press the
+real Escape key from the trigger, emoji grid or text input; the picker closes
+without discarding the draft or reply. Mobile trigger Escape is covered too.

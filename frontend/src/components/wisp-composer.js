@@ -12,14 +12,15 @@ export class WispComposer extends LitElement {
   static properties = { blocked:{type:Boolean}, chatId: { attribute: false }, pickerOpen: { state: true }, completion: { state: true }, completionIndex: { state: true } };
   constructor() {
     super(); this.blocked=false; this.chatId = null; this.pickerOpen = false; this.completion = null; this.completionIndex = 0;
+    this._pickerKeydown=e=>{if(e.key==='Escape'&&!e.defaultPrevented&&!e.isComposing&&this.pickerOpen){e.preventDefault();e.stopPropagation();this.closePicker();this.querySelector('#emojiBtn')?.focus({preventScroll:true})}};
     this._outside = e => { if (this.pickerOpen && !e.composedPath().includes(this)) this.closePicker(); };
   }
   createRenderRoot() { return this; }
   connectedCallback() {
-    super.connectedCallback(); document.addEventListener('pointerdown', this._outside);
+    super.connectedCallback(); this.addEventListener('keydown',this._pickerKeydown); document.addEventListener('pointerdown', this._outside);
     this._unsubscribe = sessionDrafts.subscribe(chat => { if (chat === this.chatId) this.requestUpdate(); });
   }
-  disconnectedCallback() { document.removeEventListener('pointerdown', this._outside); this._unsubscribe?.(); super.disconnectedCallback(); }
+  disconnectedCallback() { this.removeEventListener('keydown',this._pickerKeydown); document.removeEventListener('pointerdown', this._outside); this._unsubscribe?.(); super.disconnectedCallback(); }
   closePicker() {
     if(!this.pickerOpen)return;
     this.pickerOpen=false;

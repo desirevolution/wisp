@@ -68,6 +68,14 @@ try{
  await page.locator(`[data-id="${chat}"]`).click();await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('chat-preparing'));assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');assert.ok(await page.locator('.reply-draft').isVisible());
  await page.locator('#composerInput').press('Escape');assert.equal(await page.locator('.reply-draft').count(),0);assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');
  await row('m1').hover();await row('m1').getByRole('button',{name:'Reply to message',exact:true}).click();
+ // Escape from the emoji trigger or grid only closes the picker, preserving the reply and text.
+ for(const focus of ['trigger','grid','input']){
+  await page.locator('#emojiBtn').click();await page.locator('#emojiPicker:not([hidden])').waitFor();
+  if(focus==='grid')await page.locator('#emojiPicker wisp-emoji-picker button').first().focus();
+  if(focus==='input')await page.locator('#composerInput').focus();
+  await page.keyboard.press('Escape');await page.waitForFunction(()=>document.querySelector('#emojiPicker').hidden);
+  assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');assert.ok(await page.locator('.reply-draft').isVisible());
+ }
  failSend=true;await page.locator('#sendBtn').click();await page.getByText('Test send failure',{exact:true}).waitFor();assert.ok(await page.locator('.reply-draft').isVisible());assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');
  failSend=false;await page.locator('#sendBtn').click();await page.waitForFunction(()=>document.querySelector('#composerInput').value==='');assert.equal(sent.at(-1).reply_to,'m1');assert.equal(await page.locator('.reply-draft').count(),0);
  await row('m1').hover();await row('m1').getByRole('button',{name:'React to message',exact:true}).click();await page.locator('.message-popover:popover-open').waitFor();
@@ -132,9 +140,19 @@ try{
  await page.locator('#settingsBtn').click();await page.getByRole('dialog',{name:'Settings',exact:true}).waitFor();
  await page.getByRole('button',{name:'Close settings',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#settings').hidden);
  await page.locator(`[data-id="${chat}"]`).first().click();
+ const galleryDraft=await page.locator('#composerInput').inputValue();
  await page.locator('#mediaBtn').click();await page.locator('#gallery').waitFor();
- await page.getByRole('button',{name:'Back to chats',exact:true}).click();
- await page.getByText('Select a chat',{exact:true}).waitFor();assert.equal(await page.locator('#gallery').isVisible(),false);
+ await page.getByRole('button',{name:'Back to chat',exact:true}).click();
+ await page.locator('#composerInput').waitFor();assert.equal(await page.locator('#gallery').isVisible(),false);
+ assert.equal(await page.locator('#conversationTitle').textContent(),'Gruppe');assert.equal(await page.locator('#composerInput').inputValue(),galleryDraft);
+ await page.locator('#mediaBtn').click();await page.locator('#gallery').waitFor();
+ await page.locator('.gallery-tabs').getByRole('button',{name:'Links',exact:true}).click();
+ assert.equal(await page.evaluate(()=>history.state.kind),'links');
+ await page.goBack();await page.locator('#composerInput').waitFor();
+ await page.goForward();await page.locator('#gallery').waitFor();assert.equal(await page.locator('.gallery-tabs button.active').textContent(),'Links');
+ await page.reload();await page.locator('#gallery').waitFor();assert.equal(await page.locator('.gallery-tabs button.active').textContent(),'Links');
+ await page.goBack();await page.locator('#composerInput').waitFor();
+ await page.getByRole('button',{name:'Back to chats',exact:true}).click();await page.getByText('Select a chat',{exact:true}).waitFor();
  await page.locator(`[data-id="${chat}"]`).first().click();
  await page.waitForFunction(()=>document.activeElement?.id==='composerInput'&&!document.querySelector('.message-skeleton'));
  await page.locator('#composerInput').press('Escape');
@@ -177,6 +195,13 @@ try{
  await mr.getByRole('button',{name:'Message actions',exact:true}).click();
  await mobile.page.getByRole('button',{name:'Reply',exact:true}).click();
  await mobile.page.locator('.reply-draft').waitFor();assert.equal(await mobile.page.locator('.message-sheet').count(),0);
+ await mobile.page.locator('#emojiBtn').click();await mobile.page.locator('#emojiPicker:not([hidden])').waitFor();
+ await mobile.page.keyboard.press('Escape');await mobile.page.waitForFunction(()=>document.querySelector('#emojiPicker').hidden);assert.ok(await mobile.page.locator('.reply-draft').isVisible());
+ await mobile.page.locator('#mediaBtn').click();await mobile.page.locator('#gallery').waitFor();
+ await mobile.page.getByRole('button',{name:'Back to chat',exact:true}).click();await mobile.page.locator('#composerInput').waitFor();
+ assert.equal(await mobile.page.locator('#conversationTitle').textContent(),'Gruppe');assert.ok(await mobile.page.locator('.reply-draft').isVisible());
+ await mobile.page.locator('#mediaBtn').click();await mobile.page.locator('#gallery').waitFor();await mobile.page.goBack();await mobile.page.locator('#composerInput').waitFor();
+ const mobileHistoryAfterGallery=await mobile.page.evaluate(()=>history.length);
  await mobile.page.locator('#composerInput').press('Escape');
  await mr.getByRole('button',{name:'Message actions',exact:true}).click();
  await mobile.page.locator('.message-sheet-backdrop').click({position:{x:5,y:5}});await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));
@@ -237,7 +262,7 @@ try{
  await mobile.page.locator('#composerInput').fill('Mobile line\n');
  await mr.getByRole('button',{name:'Message actions',exact:true}).click();await mobile.page.locator('.message-popover').waitFor();
  await mobile.page.locator('.message-sheet').getByRole('button',{name:'Close',exact:true}).click();await mobile.page.waitForFunction(()=>!document.querySelector('.message-popover'));
- assert.equal(await mobile.page.evaluate(()=>history.length),await mobile.page.evaluate(()=>window.startHistoryLength)+1);
+ assert.equal(await mobile.page.evaluate(()=>history.length),mobileHistoryAfterGallery,'Message actions must not add history entries');
  assert.equal(await mobile.page.evaluate(()=>history.state.view),'chat');
  assert.equal(await mobile.page.locator('#composerInput').inputValue(),'Mobile line\n');
  await mobile.page.locator('#composerInput').fill('');await mobile.page.locator('#composerInput').blur();
@@ -284,6 +309,30 @@ try{
  await np.waitForFunction(()=>document.querySelector('#imageViewer').hidden);
  await navImage.click();await np.locator('#imageViewer:not([hidden])').waitFor();
  await np.locator('#back').press('Escape');await np.waitForFunction(()=>document.querySelector('#imageViewer').hidden);
+ // Native clicks on the open image/background can leave focus on body.
+ // Escape must work without first focusing the header Back button.
+ await np.setViewportSize({width:1200,height:844});
+ for(const focus of ['image','background','body','search']){
+  await navImage.click();await np.locator('#imageViewer:not([hidden])').waitFor();
+  if(focus==='image')await np.locator('#imageViewer img').click();
+  if(focus==='background')await np.locator('.image-viewer-stage').click({position:{x:4,y:4}});
+  if(focus==='body')await np.evaluate(()=>document.activeElement?.blur());
+  if(focus==='search')await np.locator('#search').focus();
+  await np.keyboard.press('Escape');await np.waitForFunction(()=>document.querySelector('#imageViewer').hidden,null,{timeout:3000});
+  assert.equal(await np.locator('#conversationTitle').textContent(),'Gruppe');
+ }
+ // A native chat menu has priority over the underlying image page.
+ await navImage.click();await np.locator('#imageViewer:not([hidden])').waitFor();
+ await np.getByRole('button',{name:'Chat menu',exact:true}).click();await np.locator('dialog[open]').waitFor();
+ await np.keyboard.press('Escape');await np.waitForFunction(()=>!document.querySelector('dialog[open]'));
+ assert.equal(await np.locator('#imageViewer').isVisible(),true);
+ await np.keyboard.press('Escape');await np.waitForFunction(()=>document.querySelector('#imageViewer').hidden);
+ // The nonmodal new-chat picker also closes before the image underneath it.
+ await navImage.click();await np.locator('#imageViewer:not([hidden])').waitFor();
+ await np.getByRole('button',{name:'New chat',exact:true}).click();await np.locator('#chatPicker').waitFor();
+ await np.keyboard.press('Escape');await np.waitForFunction(()=>document.querySelector('#chatPicker').hidden);
+ assert.equal(await np.locator('#imageViewer').isVisible(),true);
+ await np.keyboard.press('Escape');await np.waitForFunction(()=>document.querySelector('#imageViewer').hidden);
  // Desktop keeps the chat list active while the image fills the right pane.
  await navImage.click();await np.locator('#imageViewer:not([hidden])').waitFor();
  await np.setViewportSize({width:1200,height:844});

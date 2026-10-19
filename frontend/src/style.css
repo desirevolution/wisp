@@ -505,3 +505,16 @@ dialog.chat-controls::backdrop{background:#0009}
  .app.picker-open .conversation{display:none!important}
  .chat-picker-search .chat-options-search{font-size:16px}
 }
+
+/* Desktop chat actions stay attached to their header button. */
+@media(min-width:701px){
+ dialog.chat-controls-popup{position:fixed;inset:auto;margin:0;width:280px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);z-index:1000;border-radius:10px;box-shadow:0 8px 28px #0006}
+ .chat-controls-popup header{padding:8px 12px;gap:8px}
+ .chat-controls-popup h2{font-size:14px}
+ .chat-controls-popup header>button[aria-label="Close dialog"]{display:none}
+ .chat-controls-popup .chat-controls-body{padding:6px;max-height:calc(100dvh - 72px)}
+ .chat-controls-popup .chat-menu-actions{gap:2px}
+ .chat-controls-popup .chat-menu-actions>button{border:0;background:transparent;border-radius:6px;min-height:40px}
+ .chat-controls-popup .chat-menu-actions>button:hover{background:#2a3942}
+ .chat-controls-popup p{padding:8px;margin:0;font-size:13px}
+}
