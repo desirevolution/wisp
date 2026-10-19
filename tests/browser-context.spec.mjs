@@ -434,7 +434,8 @@ try{
  const backendGate=new Promise(done=>{releaseBackend=done}),imageGate=new Promise(done=>{releaseImage=done});
  await mp.route('**/api/chats/h%40g.us/messages?limit=50',async route=>{await backendGate;await route.continue()});
  await mp.route('**/api/media/demo-portrait',async route=>{await imageGate;await route.continue()});
- await mp.evaluate(()=>{window.presentationFrames=[];window.recordPresentation=true;const sample=()=>{if(!window.recordPresentation)return;const list=document.querySelector('#messages'),loader=document.querySelector('#chatLoading');window.presentationFrames.push({time:performance.now(),title:document.querySelector('#conversationTitle').textContent,preparing:document.querySelector('#app').classList.contains('chat-preparing'),visibility:getComputedStyle(list).visibility,loading:!loader.hidden,disabled:document.querySelector('#composerInput').disabled,bottom:list.scrollHeight-list.scrollTop-list.clientHeight});requestAnimationFrame(sample)};requestAnimationFrame(sample)});
+ await mp.waitForFunction(()=>!document.querySelector('#app').classList.contains('chat-preparing')&&!document.querySelector('#app').classList.contains('chat-revealing'));
+ await mp.evaluate(()=>{window.presentationFrames=[];window.recordPresentation=true;window.revealStarts=0;document.querySelector('#messages').addEventListener('animationstart',e=>{if(e.target.id==='messages'&&e.animationName==='chat-message-enter')window.revealStarts++});const sample=()=>{if(!window.recordPresentation)return;const list=document.querySelector('#messages'),loader=document.querySelector('#chatLoading');window.presentationFrames.push({time:performance.now(),title:document.querySelector('#conversationTitle').textContent,preparing:document.querySelector('#app').classList.contains('chat-preparing'),visibility:getComputedStyle(list).visibility,opacity:Number(getComputedStyle(list).opacity),loading:!loader.hidden,disabled:document.querySelector('#composerInput').disabled,bottom:list.scrollHeight-list.scrollTop-list.clientHeight});requestAnimationFrame(sample)};requestAnimationFrame(sample)});
  await mp.locator(`[data-id="${other}"]`).click();await mp.locator('#chatLoading').waitFor();
  assert.equal(await mp.locator('#composerInput').isDisabled(),true);
  assert.equal(await mp.locator('#messages').evaluate(el=>getComputedStyle(el).visibility),'hidden');
@@ -442,12 +443,15 @@ try{
  releaseBackend();
  await mp.locator('[data-message-id="portrait-message"]').waitFor();
  await mp.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+ await mp.waitForFunction(()=>!document.querySelector('#app').classList.contains('chat-revealing')&&getComputedStyle(document.querySelector('#messages')).opacity==='1');
  const presentation=await mp.evaluate(()=>{window.recordPresentation=false;return window.presentationFrames.filter(frame=>frame.title==='Andere Gruppe')});
  const waiting=presentation.filter(frame=>frame.preparing),revealed=presentation.find(frame=>!frame.preparing);
  assert.ok(waiting.length>0&&revealed,JSON.stringify(presentation));
  assert.ok(revealed.time-waiting[0].time>=145,JSON.stringify(presentation));
- assert.ok(waiting.every(frame=>frame.visibility==='hidden'&&frame.loading&&frame.disabled),JSON.stringify(presentation));
+ assert.ok(waiting.every(frame=>frame.visibility==='hidden'&&frame.opacity===0&&frame.loading&&frame.disabled),JSON.stringify(presentation));
  assert.ok(presentation.filter(frame=>!frame.preparing).every(frame=>frame.visibility==='visible'&&!frame.loading&&frame.bottom<2));
+ assert.ok(presentation.some(frame=>!frame.preparing&&frame.opacity>0&&frame.opacity<1),'Prepared messages must fade in through intermediate opacity values');
+ assert.equal(await mp.evaluate(()=>window.revealStarts),1);
  const image=mp.locator('[data-message-id="portrait-message"] img'),frame=mp.locator('[data-message-id="portrait-message"] .media-frame');
  assert.equal(await image.evaluate(el=>el.complete),false,'Chat must reveal without waiting for the image');
  assert.equal(await mp.evaluate(()=>document.activeElement.id),'search','Ready chat must not steal focus after the user returns to search');
@@ -472,9 +476,12 @@ try{
    assert.equal(transitioned.height,afterImage.height,`Height changed for media status ${status}`);
  }
 
+ assert.equal(await mp.evaluate(()=>window.revealStarts),1,'Media events must not replay the chat entrance');
  // Later visits use the learned portrait ratio immediately.
  await mp.locator(`[data-id="${chat}"]`).click();await mp.locator('[data-message-id="g@g.us-59"]').waitFor();
  await mp.locator(`[data-id="${other}"]`).click();await mp.locator('[data-message-id="portrait-message"]').waitFor();
+ await mp.waitForFunction(()=>!document.querySelector('#app').classList.contains('chat-revealing'));
+ assert.equal(await mp.evaluate(()=>window.revealStarts),3,'Each prepared cached visit fades in once');
  const learned=await frame.boundingBox();assert.ok(Math.abs(learned.width/learned.height-.25)<.01,JSON.stringify(learned));
  // Latest selection wins; an older preparation and response cannot reveal over it.
  await mp.evaluate(({chat,other})=>{document.querySelector(`[data-id="${chat}"]`).click();document.querySelector(`[data-id="${other}"]`).click();document.querySelector(`[data-id="${chat}"]`).click()},{chat,other});
@@ -526,6 +533,21 @@ try{
  await mp.locator('#anchor-regression-list').evaluate(el=>el.remove());
  assert.deepEqual(staged.errors,[]);await staged.context.close();
  console.log('Prepared chat: 150ms quiet loading, hidden layout, disabled input, stable delayed image, learned ratio and latest selection passed');
+ // The same prepared reveal runs on mobile; reduced motion skips it on both sizes.
+ for(const width of [1200,390])for(const reducedMotion of ['no-preference','reduce']){
+  const transition=await pageFor({viewport:{width,height:850},reducedMotion,isMobile:width<701,hasTouch:width<701}),tp=transition.page;
+  await tp.waitForFunction(()=>!document.querySelector('#app').classList.contains('chat-preparing')&&!document.querySelector('#app').classList.contains('chat-revealing'));
+  if(width<701){await tp.getByRole('button',{name:'Back to chats',exact:true}).click();await tp.locator('.sidebar').waitFor()}
+  await tp.evaluate(()=>{window.fadeSamples=[];window.sampleFade=true;const sample=()=>{if(!window.sampleFade)return;const list=document.querySelector('#messages');window.fadeSamples.push({preparing:document.querySelector('#app').classList.contains('chat-preparing'),opacity:Number(getComputedStyle(list).opacity),animation:getComputedStyle(list).animationName});requestAnimationFrame(sample)};requestAnimationFrame(sample)});
+  await tp.locator(`[data-id="${other}"]`).click();await tp.locator('[data-message-id="portrait-message"]').waitFor();
+  await tp.waitForFunction(()=>!document.querySelector('#app').classList.contains('chat-preparing')&&!document.querySelector('#app').classList.contains('chat-revealing'));
+  const samples=await tp.evaluate(()=>{window.sampleFade=false;return window.fadeSamples.filter(sample=>!sample.preparing)});
+  if(reducedMotion==='reduce')assert.ok(samples.every(sample=>sample.opacity===1&&sample.animation==='none'),JSON.stringify({width,samples}));
+  else assert.ok(samples.some(sample=>sample.opacity>0&&sample.opacity<1),JSON.stringify({width,samples}));
+  assert.equal(await tp.locator('#messages').evaluate(el=>getComputedStyle(el).opacity),'1');
+  assert.deepEqual(transition.errors,[]);await transition.context.close();
+ }
+ console.log('Chat entrance: positioned before a single fade, cached visits, stable media updates, mobile and reduced motion passed');
  // Quoted photos reserve a compact thumbnail on desktop and mobile.
  for (const width of [1200,390]) {
   const quotePage=await browser.newPage({viewport:{width,height:850}});

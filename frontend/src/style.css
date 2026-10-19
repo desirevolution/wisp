@@ -421,7 +421,10 @@ wisp-composer{display:block;grid-row:3;min-width:0}
 .wisp-brand:hover{color:#b6eee1}
 
 /* Render new chat content at its final size behind a quiet loading surface. */
-.chat-preparing #messages{visibility:hidden;pointer-events:none}
+.chat-preparing #messages{visibility:hidden;opacity:0;pointer-events:none}
+.chat-revealing #messages{animation:chat-message-enter 140ms ease-out both}
+@keyframes chat-message-enter{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.chat-revealing #messages{animation:none}}
 .chat-loading{grid-row:2;grid-column:1;min-height:0;display:grid;place-items:center;z-index:1;background:#0b141a;color:var(--muted);padding:24px;text-align:center}
 .chat-loading p{max-width:36rem;overflow-wrap:anywhere}
 .chat-loading button{min-height:44px;border:1px solid var(--border);border-radius:7px;padding:8px 14px;background:#24343c;color:#e9edef;cursor:pointer}

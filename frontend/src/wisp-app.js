@@ -163,8 +163,9 @@ let chatLoadToken=0;
 const MESSAGE_CACHE_TTL=2*60*1000;
 const nextLayoutFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
 let chatPreparation=null;
-function cancelChatPreparation(){chatPreparation=null;state.chatPreparing=false;state.chatLoadError='';app.classList.remove('chat-preparing')}
+function cancelChatPreparation(){chatPreparation=null;state.chatPreparing=false;state.chatLoadError='';app.classList.remove('chat-preparing','chat-revealing')}
 function beginChatPreparation(token){
+  app.classList.remove('chat-revealing');
   $('#messages')?.closePanel(false);$('#composer')?.closePicker();
   state.chatPreparing=true;state.chatLoadError='';state.activePane='right';state.keyboardNavActive=false;
   const context={token,shownAt:nextLayoutFrame().then(()=>performance.now())};
@@ -183,7 +184,7 @@ async function revealPreparedChat(token,position){
   await $('#composer')?.updateComplete;
   if(!await waitForLoadingMinimum(token))return false;
   // Keep normal layout dimensions while hidden. Position both after composer
-  // sizing and once more in the next frame, then reveal without a transition.
+  // sizing and once more in the next frame, then fade in the prepared surface.
   for(let i=0;i<2;i++){
     await nextLayoutFrame();if(!isCurrentChat(token))return false;
     conversation.positionMessages(position);
@@ -191,6 +192,7 @@ async function revealPreparedChat(token,position){
   if(!isCurrentChat(token))return false;
   state.chatPreparing=false;chatPreparation=null;
   renderShell({refreshMessages:false});conversation.updateNewButton();
+  app.classList.toggle('chat-revealing',!window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   return true;
 }
 async function failChatPreparation(token,error){
@@ -462,7 +464,7 @@ function wireShell(){
   const once=(id,event,handler)=>{const el=$(id);if(el&&!el.dataset.shellWired){el.addEventListener(event,handler);el.dataset.shellWired='true'}};
   once('#back','click',()=>{if(state.view==='gallery'&&!state.imageViewer){if(!viewHistory.closeGallery())returnFromGallery();return}backToSelection()});
   once('#composer','image-sent',event=>followSentImage(event.detail));
-  const messages=$('#messages');if(messages&&!messages.dataset.imageWired){messages.dataset.imageWired='true';messages.addEventListener('image-open',event=>openImageViewer(event.detail))}
+  const messages=$('#messages');if(messages&&!messages.dataset.imageWired){messages.dataset.imageWired='true';messages.addEventListener('image-open',event=>openImageViewer(event.detail));for(const event of ['animationend','animationcancel'])messages.addEventListener(event,e=>{if(e.target===messages&&e.animationName==='chat-message-enter')app.classList.remove('chat-revealing')})}
   once('#settingsBtn','click',openSettings);
   once('#newMessages','click',()=>conversation.scrollBottom());
   once('#mediaBtn','click',()=>{rememberPosition();$('#messages')?.closePanel(false);$('#composer')?.closePicker();return gallery.open('media')});

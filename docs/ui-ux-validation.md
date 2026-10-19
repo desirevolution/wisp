@@ -274,3 +274,16 @@ Desktop and mobile browser tests cover the header and browser Back paths.
 Composer Escape tests open the emoji picker through its button, then press the
 real Escape key from the trigger, emoji grid or text input; the picker closes
 without discarding the draft or reply. Mobile trigger Escape is covered too.
+
+
+Prepared chat entrance: after hidden layout and two positioning frames, the
+message surface fades from opacity 0 to 1 over 140 ms with ease-out timing.
+Only the message list animates; no transforms or per-message stagger are used.
+Starting another preparation or returning to the overview cancels the entrance.
+Normal animation completion/cancellation clears its class. Reduced motion
+skips the entrance, with CSS also handling preference changes while it runs.
+Browser frame sampling verifies intermediate opacity values, hidden/transparent
+preparation, correct bottom position from the first revealed frame, one entrance
+per cached visit and no replay for media updates. Desktop/mobile and both
+motion preferences are covered alongside rapid selection and Back cancellation.
+The existing 150 ms loading minimum and independent image loading remain.
