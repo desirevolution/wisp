@@ -151,3 +151,9 @@ bubble. Mobile replaces per-message buttons with long press and a compact
 recent-reaction sheet, with separate full emoji and action views. Text/caption
 and image copying work in normal and mirror mode; failed image copying offers
 a download. Added real clipboard and touch regressions.
+
+
+Desktop follow-up: only React remains beside each message. A top-right chevron
+in the bubble appears on the same hover/focus state and opens Reply first, then
+the copy actions. The dropdown remains available for copying in mirror mode.
+Mobile long press and its bottom-sheet views are unchanged.

@@ -111,7 +111,8 @@ export class WispMessageList extends LitElement {
   downloadImage(m){
     const link=document.createElement('a');link.href=`/api/media/${encodeURIComponent(m.media_id)}`;link.download=m.filename||m.media_filename||`wisp-image-${m.id}`;document.body.append(link);link.click();link.remove();this.closePanel();
   }
-  renderCopyActions(m){return html`<div class="message-copy-actions">
+  renderCopyActions(m,includeReply=false){return html`<div class="message-copy-actions">
+    ${includeReply&&this.sendEnabled?html`<button type="button" ?disabled=${this.menu.busy} @click=${()=>{this.closePanel();this.emit('reply-select',{message:m})}}>${icon('reply')} Reply</button>`:nothing}
     ${m.body?html`<button type="button" ?disabled=${this.menu.busy} @click=${()=>this.copyMessage(m,'text')}>${icon('copy')} Copy text</button>`:null}
     ${this.canCopyImage(m)?html`<button type="button" ?disabled=${this.menu.busy} @click=${()=>this.copyMessage(m,'image')}>${icon('image')} Copy image</button>`:null}
     ${!m.body&&!this.canCopyImage(m)?html`<p>No copyable content.</p>`:null}
@@ -131,7 +132,8 @@ export class WispMessageList extends LitElement {
     if(this.menu?.mode==='actions'){panel.querySelector('.message-sheet-content button:not(:disabled)')?.focus({preventScroll:true});return}
     const rect=this._anchor.getBoundingClientRect(),box=panel.getBoundingClientRect();
     const width=document.documentElement.clientWidth,height=window.visualViewport?.height || window.innerHeight;
-    panel.style.left=`${Math.max(8,Math.min(rect.left,width-box.width-8))}px`;
+    const leftBound=this.menu.mode==='more'?Math.max(8,Math.min(this.getBoundingClientRect().left+8,width-box.width-8)):8;
+    panel.style.left=`${Math.max(leftBound,Math.min(this.menu.mode==='more'?rect.right-box.width:rect.left,width-box.width-8))}px`;
     const below=height-rect.bottom-12;
     panel.style.top=`${Math.max(8,below>=box.height?rect.bottom+5:rect.top-box.height-5)}px`;
     const first=[...panel.querySelectorAll('button:not(:disabled)')].find(button=>button.getClientRects().length);
@@ -171,7 +173,7 @@ export class WispMessageList extends LitElement {
     const m=this.messages.find(x=>x.id===this.menu.id);if(!m)return null;
     const own=(m.reactions||[]).find(r=>r.from_me),sheet=this.menu.mode==='actions',view=this.menu.view;
     const recent=[...new Set([...recentEmojis(),'👍','❤️','😂','😮','😢','🙏'])].slice(0,6);
-    return html`<div class="message-popover ${sheet?'message-sheet':''}" popover="manual" role="dialog" tabindex="-1" aria-modal=${sheet?'true':nothing} aria-label=${sheet||this.menu.mode==='more'?'Message actions':this.menu.mode==='picker'?'React to message':'Reactions'} @keydown=${this.panelKey}>
+    return html`<div class="message-popover ${sheet?'message-sheet':this.menu.mode==='more'?'message-options':''}" popover="manual" role="dialog" tabindex="-1" aria-modal=${sheet?'true':nothing} aria-label=${sheet||this.menu.mode==='more'?'Message actions':this.menu.mode==='picker'?'React to message':'Reactions'} @keydown=${this.panelKey}>
       ${sheet?html`
         <button class="message-sheet-backdrop" tabindex="-1" aria-label="Close message actions" @click=${()=>this.closePanel()}></button>
         <section class="message-sheet-content">
@@ -182,7 +184,7 @@ export class WispMessageList extends LitElement {
           ${view==='options'?html`${this.sendEnabled?html`<button class="sheet-reply" type="button" ?disabled=${this.menu.busy} @click=${()=>{this.closePanel();this.emit('reply-select',{message:m})}}>${icon('reply')} Reply</button>`:nothing}${this.renderCopyActions(m)}`:nothing}
         </section>`:html`
         <div class="reaction-panel-head"><b>${this.menu.mode==='picker'?'React to message':this.menu.mode==='more'?'Message actions':`${this.menu.emoji} Reactions`}</b><button class="popover-close" type="button" aria-label="Close" @click=${()=>this.closePanel()}>${icon('close')}</button></div>
-        ${this.menu.mode==='more'?this.renderCopyActions(m):this.menu.mode==='picker'?this.renderPicker(m,own):html`<ul class="reaction-people">${(m.reactions||[]).filter(r=>r.emoji===this.menu.emoji).map(r=>html`<li><span>${r.from_me?'You':r.actor_name||'Unknown participant'}</span>${r.from_me&&this.sendEnabled?html`<button type="button" ?disabled=${this.pendingReactions.has(m.id)} @click=${()=>this.setReaction(m,'')}>Remove</button>`:null}</li>`)}</ul>`}`}
+        ${this.menu.mode==='more'?this.renderCopyActions(m,true):this.menu.mode==='picker'?this.renderPicker(m,own):html`<ul class="reaction-people">${(m.reactions||[]).filter(r=>r.emoji===this.menu.emoji).map(r=>html`<li><span>${r.from_me?'You':r.actor_name||'Unknown participant'}</span>${r.from_me&&this.sendEnabled?html`<button type="button" ?disabled=${this.pendingReactions.has(m.id)} @click=${()=>this.setReaction(m,'')}>Remove</button>`:null}</li>`)}</ul>`}`}
     </div>`;
   }
   _loadOlder(){this.dispatchEvent(new CustomEvent('load-older',{bubbles:true,composed:true}))}
@@ -236,16 +238,14 @@ export class WispMessageList extends LitElement {
         return html`${showDay?html`<div class="date-separator"><span>${dayLabel(m.timestamp)}</span></div>`:null}
           <div class="message-row ${m.from_me?'outgoing':''} ${grouped?'grouped':'group-start'}">
             <div class="message-stack"><div class="bubble ${m.from_me?'me':''} ${m.has_media?'media-bubble':''} ${!m.deleted&&!m.edited&&m.has_media&&!m.body&&!m.reply?'media-only':''}" data-message-id=${m.id} tabindex=${this.canAct(m)?'0':nothing} aria-label=${this.canAct(m)?'Message. Long press or press Shift+F10 for actions':nothing} @pointerdown=${e=>this.startPress(e,m)} @contextmenu=${e=>this.messageContext(e,m)} @keydown=${e=>this.messageKey(e,m)}>
+              ${this.canAct(m)?html`<button class="message-more-action" type="button" aria-label="Message actions" title="Message actions" aria-haspopup="dialog" aria-expanded=${this.menu?.id===m.id&&this.menu?.mode==='more'} @click=${e=>this.openPanel('more',m,e)}>${icon('chevronDown')}</button>`:nothing}
               ${this.isGroup&&!grouped&&!m.from_me&&m.sender_name&&!rawId(m.sender_name)?html`<div class="sender">${m.sender_name}</div>`:null}
               ${m.deleted?html`<div class="deleted-label">Message deleted</div>${m.type!=='deleted'?html`<button class="deleted-toggle" aria-expanded=${this.expanded.has(m.id)} @click=${()=>this.toggleDeleted(m.id)}>${this.expanded.has(m.id)?'Hide deleted message':'Show deleted message'}</button>`:null}`:null}
               ${!m.deleted||this.expanded.has(m.id)?html`${m.reply?this.quote(m.reply,`quote:${m.id}`):null}${this._media(m)}${m.body?html`<div class="body"><span class="message-text">${unsafeHTML(linkify(m.body))}</span>${this.timestamp(m,true)}</div>`:null}${this.editHistory(m)}`:null}
               ${!inlineTime?this.timestamp(m):null}
             </div>
             ${!m.deleted||this.expanded.has(m.id)?this.reactionChips(m):null}</div>
-            ${this.canAct(m)?html`<div class="message-actions">
-              ${this.sendEnabled?html`<button type="button" class="reaction-action desktop-message-action" aria-label="React to message" title="Add reaction" ?disabled=${this.pendingReactions.has(m.id)} @click=${e=>this.openPanel('picker',m,e)}>${icon('smile')}</button><button type="button" aria-label="Reply to message" class="desktop-message-action" title="Reply" @click=${()=>this.emit('reply-select',{message:m})}>${icon('reply')}</button>`:nothing}
-              <button class="desktop-message-action message-more-action" type="button" aria-label="Message actions" title="Message actions" aria-haspopup="dialog" aria-expanded=${this.menu?.id===m.id&&this.menu?.mode==='more'} @click=${e=>this.openPanel('more',m,e)}>${icon('more')}</button>
-            </div>`:null}
+            ${this.sendEnabled&&!m.deleted?html`<div class="message-actions"><button type="button" class="reaction-action desktop-message-action" aria-label="React to message" title="Add reaction" ?disabled=${this.pendingReactions.has(m.id)} @click=${e=>this.openPanel('picker',m,e)}>${icon('smile')}</button></div>`:nothing}
           </div>`;
       })}
       ${this.renderPanel()}

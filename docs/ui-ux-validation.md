@@ -309,3 +309,11 @@ Message action update (19 October 2026):
   versus image-only eligibility and no backend mutations are asserted.
 - The full Node, DOM and browser suites, production build and Go tests pass.
   Physical Android/iOS clipboard/keyboard behavior still needs device checks.
+
+
+Desktop bubble-menu follow-up: browser geometry checks assert one external
+reaction action and a top-right dropdown within incoming/outgoing bubbles.
+Hover keeps the bubble's position and size unchanged; keyboard focus reveals
+the same controls. Reply is the first dropdown item and opens the reply draft.
+Mirror mode exposes only copy actions. Existing clipboard/image, Escape,
+message layout and mobile long-press regression suites remain in place.

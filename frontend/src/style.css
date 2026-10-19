@@ -516,11 +516,10 @@ dialog.chat-controls::backdrop{background:#0009}
  .chat-controls-popup p{padding:8px;margin:0;font-size:13px}
 }
 
-/* Mirror desktop actions so reactions stay nearest to either message edge. */
+/* A single reaction action stays beside either message edge. */
 @media(min-width:701px){
- .message-row{grid-template-columns:fit-content(min(78%,calc(100% - 106px))) max-content}
- .message-row.outgoing{grid-template-columns:max-content fit-content(min(78%,calc(100% - 106px)))}
- .message-row.outgoing .message-actions{flex-direction:row-reverse}
+ .message-row{grid-template-columns:fit-content(min(78%,calc(100% - 42px))) max-content}
+ .message-row.outgoing{grid-template-columns:max-content fit-content(min(78%,calc(100% - 42px)))}
  .message-actions .desktop-message-action{display:inline-flex}
 }
 .message-copy-actions{display:grid;gap:4px;min-height:0;overflow:auto}
@@ -545,3 +544,20 @@ dialog.chat-controls::backdrop{background:#0009}
  .bubble img,.bubble a{-webkit-touch-callout:none;-webkit-user-drag:none}
 }
 .quick-reactions button{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;font-variant-emoji:emoji}
+
+/* Reveal the bubble menu alongside the reaction action without changing layout. */
+.message-more-action{display:none}
+@media(min-width:701px){
+ .bubble>.message-more-action{display:grid;place-items:center;position:absolute;top:3px;right:3px;z-index:1;width:28px;height:28px;padding:0;border:0;border-radius:6px;background:#202c33;color:#c6d4dc;cursor:pointer;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s}
+ .bubble.me>.message-more-action{background:#005c4b}
+ .bubble>.message-more-action .wisp-icon{width:20px;height:20px}
+ .message-row:hover .message-more-action,.message-row:focus-within .message-more-action,.bubble>.message-more-action[aria-expanded="true"]{opacity:1;visibility:visible;pointer-events:auto}
+ .message-row:has(.message-more-action[aria-expanded="true"]) .message-actions{opacity:1}
+ .bubble>.message-more-action:hover{background:#334650;color:#fff}
+ .bubble.me>.message-more-action:hover{background:#176e5d}
+ .bubble:has(>.message-more-action):not(.media-bubble){padding-right:36px}
+ .bubble.media-bubble:has(>.message-more-action)>.sender,.bubble.media-bubble:has(>.message-more-action)>.quoted-message{padding-right:32px}
+}
+@media(min-width:701px) and (hover:none){.bubble>.message-more-action{opacity:1;visibility:visible;pointer-events:auto}}
+
+.message-popover.message-options{width:min(240px,calc(100vw - 16px))}

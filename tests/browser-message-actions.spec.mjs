@@ -44,10 +44,19 @@ try{
  const bubble=(page,id)=>page.locator(`[data-message-id="${id}"]`),row=(page,id)=>bubble(page,id).locator('..').locator('..');
  const more=async(page,id)=>{await row(page,id).hover();await row(page,id).getByRole('button',{name:'Message actions',exact:true}).click();await page.locator('.message-popover:popover-open').waitFor()};
  for(const id of ['in','out']){
-  await row(p,id).hover();const actions=row(p,id);
-  const react=await actions.getByRole('button',{name:'React to message',exact:true}).boundingBox(),reply=await actions.getByRole('button',{name:'Reply to message',exact:true}).boundingBox(),menu=await actions.getByRole('button',{name:'Message actions',exact:true}).boundingBox();
-  assert.ok(id==='in'?react.x<reply.x&&reply.x<menu.x:menu.x<reply.x&&reply.x<react.x);
+  await p.locator('.sidebar-top').hover();await p.locator('#composerInput').focus();
+  await p.waitForFunction(id=>getComputedStyle(document.querySelector(`[data-message-id="${id}"]`).closest('.message-row').querySelector('.message-actions')).opacity==='0',id);
+  assert.equal(await bubble(p,id).getByRole('button',{name:'Message actions',exact:true}).isVisible(),false);
+  const before=await bubble(p,id).boundingBox();await row(p,id).hover();
+  const actions=row(p,id),react=await actions.getByRole('button',{name:'React to message',exact:true}).boundingBox(),menu=await bubble(p,id).getByRole('button',{name:'Message actions',exact:true}).boundingBox(),after=await bubble(p,id).boundingBox();
+  assert.deepEqual(after,before,'Hover must not resize or move the message');
+  assert.ok(menu.x+menu.width<=after.x+after.width&&menu.x+menu.width>=after.x+after.width-6&&menu.y>=after.y&&menu.y<after.y+6,JSON.stringify({menu,after}));
+  assert.ok(id==='in'?react.x>=after.x+after.width:react.x+react.width<=after.x);
+  assert.equal(await actions.locator('.message-actions button').count(),1);assert.equal(await actions.getByRole('button',{name:'Reply to message',exact:true}).count(),0);
+  await p.locator('.sidebar-top').hover();await bubble(p,id).focus();await bubble(p,id).getByRole('button',{name:'Message actions',exact:true}).waitFor();
  }
+ await more(p,'out');const dropdown=await p.locator('.message-options').boundingBox(),conversation=await p.locator('.conversation').boundingBox();assert.ok(dropdown.x>=conversation.x&&dropdown.x+dropdown.width<=conversation.x+conversation.width);assert.equal((await p.locator('.message-copy-actions button').allTextContents())[0].trim(),'Reply');
+ await p.getByRole('button',{name:'Reply',exact:true}).click();await p.locator('.reply-draft').waitFor();assert.ok((await p.locator('.reply-draft').textContent()).includes('Outgoing message'));await p.locator('#composerInput').press('Escape');
  await more(p,'in');await p.getByRole('button',{name:'Copy text',exact:true}).click();await p.waitForFunction(()=>!document.querySelector('.message-popover'));
  assert.equal(await p.evaluate(()=>window.writes[0].text),rows()[0].body);assert.equal(await p.locator('#appToast').textContent(),'Text copied');
  await more(p,'caption');assert.ok(await p.getByRole('button',{name:'Copy text',exact:true}).isVisible());await p.getByRole('button',{name:'Copy image',exact:true}).click();await p.waitForFunction(()=>!document.querySelector('.message-popover'));
@@ -96,5 +105,5 @@ try{
   assert.deepEqual(readonly.errors,[]);await readonly.context.close();
  }
  assert.equal(mutations,0,'Copy actions must not mutate WhatsApp or send messages');
- console.log('Message actions: mirrored desktop controls; text and PNG clipboard; download fallback; real touch hold/tap/scroll/link; compact/recent/full/options sheets; keyboard and mirror mode passed');
+ console.log('Message actions: desktop reaction plus top-right bubble menu, Reply first; text and PNG clipboard; download fallback; real touch hold/tap/scroll/link; compact/recent/full/options sheets; keyboard and mirror mode passed');
 }finally{await browser?.close();server.closeAllConnections();await new Promise(done=>server.close(done))}

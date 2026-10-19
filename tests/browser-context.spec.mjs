@@ -62,12 +62,12 @@ try{
  if(!process.env.WISP_SWITCH_ONLY){
  const {context,page,errors}=await pageFor({viewport:{width:1200,height:850}});
  const row=id=>page.locator(`[data-message-id="${id}"]`).locator('..').locator('..');
- await row('m1').hover();await row('m1').getByRole('button',{name:'Reply to message',exact:true}).click();
+ await row('m1').hover();await row('m1').getByRole('button',{name:'Message actions',exact:true}).click();await page.getByRole('button',{name:'Reply',exact:true}).click();
  await page.locator('.reply-draft').waitFor();await page.locator('#composerInput').fill('Entwurf A');
  await page.locator(`[data-id="${other}"]`).click();await page.locator('#composerInput').fill('Entwurf B');
  await page.locator(`[data-id="${chat}"]`).click();await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('chat-preparing'));assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');assert.ok(await page.locator('.reply-draft').isVisible());
  await page.locator('#composerInput').press('Escape');assert.equal(await page.locator('.reply-draft').count(),0);assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');
- await row('m1').hover();await row('m1').getByRole('button',{name:'Reply to message',exact:true}).click();
+ await row('m1').hover();await row('m1').getByRole('button',{name:'Message actions',exact:true}).click();await page.getByRole('button',{name:'Reply',exact:true}).click();
  // Escape from the emoji trigger or grid only closes the picker, preserving the reply and text.
  for(const focus of ['trigger','grid','input']){
   await page.locator('#emojiBtn').click();await page.locator('#emojiPicker:not([hidden])').waitFor();
@@ -104,7 +104,7 @@ try{
  assert.ok(timeBox.x>=textBox.x+textBox.width+5,'short message time must share the line');
  assert.ok(timeBox.y+timeBox.height<=bubbleBox.y+bubbleBox.height+.5,'time must stay inside bubble');
  // The actual browser handles multipart image drafts as well as JSON text sends.
- await row('m1').hover();await row('m1').getByRole('button',{name:'Reply to message',exact:true}).click();
+ await row('m1').hover();await row('m1').getByRole('button',{name:'Message actions',exact:true}).click();await page.getByRole('button',{name:'Reply',exact:true}).click();
  await page.locator('#composerInput').fill('My image caption');
  await page.locator('#imageFile').setInputFiles({name:'pixel.png',mimeType:'image/png',buffer:await readFile('tests/fixtures/pixel.png')});
  await page.locator('.image-draft').waitFor();
