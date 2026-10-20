@@ -4,6 +4,7 @@ import { icon } from '../lib/icons.js';
 import { live } from 'lit/directives/live.js';
 import { emojiMatch, rememberEmoji } from '../lib/emoji.js';
 import { mediaLabel } from '../lib/utils.js';
+import { sessionOutbox } from '../services/outbox.js';
 import { sessionDrafts } from '../core/drafts.js';
 import { prepareCameraImage } from '../services/camera-image.js';
 import './wisp-emoji-picker.js';
@@ -99,25 +100,16 @@ export class WispComposer extends LitElement {
   async send() {
     const chat = this.chatId, draft = this.draft, text = draft.text.trim();
     if (this.blocked || !chat || draft.sending || draft.preparingImage || (!text && !draft.image)) return;
-    const revision = draft.revision;
-    sessionDrafts.update(chat, { sending: true, error: '' });
-    try {
-      let path = 'send', options;
-      if (draft.image) {
-        const form = new FormData();
-        form.append('image', draft.image.file, draft.image.file.name || 'pasted-image');
-        form.append('caption', text); form.append('reply_to', draft.reply?.message_id || '');
-        path = 'send-image'; options = { method: 'POST', body: form };
-      } else options = { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, reply_to: draft.reply?.message_id || '' }) };
-      const response = await fetch(`/api/chats/${encodeURIComponent(chat)}/${path}`, options);
-      const result = await response.json().catch(() => null);
-      if (!response.ok || result?.ok !== true) throw new Error(result?.error || 'Message could not be sent');
-      if (sessionDrafts.get(chat).revision === revision) sessionDrafts.update(chat, { text: '', reply: null, image: null });
-      if(draft.image)this.dispatchEvent(new CustomEvent('image-sent',{detail:{chatId:chat,messageId:result.id},bubbles:true,composed:true}));
-      this.closePicker(); this._hideCompletion();
-    } catch (e) { sessionDrafts.update(chat, { error: e.message || 'Message could not be sent' }); }
-    finally { sessionDrafts.update(chat, { sending: false }); await this.updateComplete; if (this.isConnected && this.chatId === chat) this.focusInput(); }
+    const preview=this.querySelector('.image-draft img');
+    const image=draft.image?{file:draft.image.file,width:preview?.naturalWidth||0,height:preview?.naturalHeight||0}:null;
+    const {done}=sessionOutbox.enqueue({chatId:chat,text,reply:draft.reply,image,serverRevision:draft.serverRevision});
+    sessionDrafts.update(chat,{text:'',reply:null,image:null,error:''});
+    this.closePicker();this._hideCompletion();
+    await this.updateComplete;
+    if(this.chatId===chat&&window.matchMedia('(min-width:701px)').matches&&[this.input,this.querySelector('#sendBtn')].includes(document.activeElement))this.focusInput();
+    return done;
   }
+
   updated() {
     const input = this.input;
     if (!input) return;
@@ -144,7 +136,7 @@ export class WispComposer extends LitElement {
         <button class="image-btn camera-btn" type="button" aria-label="Take photo" title="Take photo" ?disabled=${d.sending || this.blocked} @click=${() => this.querySelector('#cameraFile')?.click()}>${icon('camera')}</button>
         <button id="emojiBtn" class="emoji-btn" type="button" aria-label="Emoji" title="Emoji" ?disabled=${d.sending || this.blocked} @click=${this.togglePicker}>${icon('smile')}</button>
         <textarea id="composerInput" rows="1" maxlength="4000" placeholder=${d.image ? "Image caption (optional)" : "Message"} aria-label=${d.image ? "Image caption" : "Message"} .value=${live(d.text)} ?disabled=${d.sending || this.blocked} @paste=${this._onPaste} @input=${this._onInput} @keydown=${this._onKeydown}></textarea>
-        <button id="sendBtn" class="send-btn" type="button" aria-label="Send" title="Send" ?disabled=${d.sending || d.preparingImage || this.blocked || (!d.text.trim() && !d.image)} @click=${this.send}>${d.sending?html`<span class="sync-spinner" aria-hidden="true"></span>`:icon('send')}</button>
+        <button id="sendBtn" class="send-btn" type="button" aria-label="Send" title="Send" @pointerdown=${e=>{if(e.pointerType==='touch'&&document.activeElement===this.input)e.preventDefault()}} ?disabled=${d.sending || d.preparingImage || this.blocked || (!d.text.trim() && !d.image)} @click=${this.send}>${d.sending?html`<span class="sync-spinner" aria-hidden="true"></span>`:icon('send')}</button>
       </div>
       <div id="sendError" class="send-error" role="alert" ?hidden=${!d.error}>${d.error}</div>
     </div>`;

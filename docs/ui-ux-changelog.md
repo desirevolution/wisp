@@ -157,3 +157,10 @@ Desktop follow-up: only React remains beside each message. A top-right chevron
 in the bubble appears on the same hover/focus state and opens Reply first, then
 the copy actions. The dropdown remains available for copying in mirror mode.
 Mobile long press and its bottom-sheet views are unchanged.
+
+
+Sending feedback: messages now appear immediately as outgoing bubbles with
+queued/sending/error states. The composer clears immediately and stays usable.
+Retry is attached to the failed bubble and preserves the next draft. Text,
+replies and image snapshots survive reloads on the device when storage permits.
+Stable WhatsApp message IDs reconcile live/HTTP results and explicit retries.

@@ -1,3 +1,4 @@
+import {sessionOutbox} from './outbox.js';
 import { mergeKnownReactions } from '../core/reactions.js';
 export function createConversation({ app, store, apiJson, onRetryMedia, onReply, onReaction, onQuote }) {
   let initialScrollTimer = null;
@@ -66,7 +67,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
     const el = ensureMessageList();
     if (!el) return null;
     el.chatId=state.selectedChatId;
-    el.messages = state.messages;
+    el.messages = sessionOutbox.merge(state.selectedChatId,state.messages);
     el.sendEnabled = state.sendEnabled && !state.mirrorOnly;
     el.pendingReactions = state.pendingReactions;
     el.hasOlder = state.hasOlder;

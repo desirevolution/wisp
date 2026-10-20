@@ -34,6 +34,8 @@ const (
 )
 
 type Service struct {
+	outgoingMu             sync.Mutex
+	outgoingPending        map[string]chan struct{}
 	sender                 messageTransport
 	reactionSendMu         sync.Mutex
 	mu                     sync.RWMutex
@@ -987,7 +989,7 @@ func isVisibleMessage(kind, body string, media int) bool {
 	return kind == "chat" && strings.TrimSpace(body) != ""
 }
 
-func (s *Service) SendText(ctx context.Context, chat, text, replyTo string) (string, error) {
+func (s *Service) SendText(ctx context.Context, chat, text, replyTo string, clientIDs ...string) (string, error) {
 	if s.store.ConfigBool("mirrorOnly", false) {
 		return "", fmt.Errorf("%w: mirror-only mode", ErrInvalidAction)
 	}
@@ -997,6 +999,14 @@ func (s *Service) SendText(ctx context.Context, chat, text, replyTo string) (str
 	}
 	if len([]rune(text)) > 4000 {
 		return "", fmt.Errorf("message is too long")
+	}
+	id, already, release, err := s.beginOutgoing(ctx, chat, text, "chat", replyTo, clientIDs)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	if already {
+		return id, nil
 	}
 	if s.transport() == nil || !s.transport().IsConnected() || !s.transport().IsLoggedIn() {
 		return "", fmt.Errorf("whatsapp is not connected")
@@ -1024,7 +1034,7 @@ func (s *Service) SendText(ctx context.Context, chat, text, replyTo string) (str
 		outgoing = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: &waE2E.ContextInfo{StanzaID: proto.String(target.WhatsAppID), Participant: proto.String(sender.ToNonAD().String()), RemoteJID: proto.String(originalChat.String()), QuotedMessage: content}}}
 		jid = originalChat
 	}
-	resp, err := s.transport().SendMessage(ctx, jid, outgoing)
+	resp, err := s.transport().SendMessage(ctx, jid, outgoing, outgoingExtra(id)...)
 	if err != nil {
 		return "", err
 	}
@@ -1051,11 +1061,11 @@ func (s *Service) SendText(ctx context.Context, chat, text, replyTo string) (str
 	}
 	m := model.Message{ID: string(resp.ID), WhatsAppID: string(resp.ID), ChatID: chat, SenderID: sender, FromMe: 1, Type: "chat", Body: text, Timestamp: ts}
 	if err := s.addContext(ctx, &m, outgoing, jid.String(), self); err != nil {
-		return "", err
+		return string(resp.ID), nil
 	}
 	inserted, err := s.store.Save(m, chatName, chatType)
 	if err != nil {
-		return "", fmt.Errorf("message sent but local persistence failed: %w", err)
+		return string(resp.ID), nil
 	}
 	if inserted {
 		m.Body = s.mentionBody(ctx, m.ChatID, m.Body, m.MentionJIDs, true)

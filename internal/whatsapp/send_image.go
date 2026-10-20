@@ -82,13 +82,21 @@ func inspectImage(data []byte) (imageDetails, error) {
 	return imageDetails{mime, cfg.Width, cfg.Height, out.Bytes()}, nil
 }
 
-func (s *Service) SendImage(ctx context.Context, chat, caption, replyTo string, data []byte) (string, error) {
+func (s *Service) SendImage(ctx context.Context, chat, caption, replyTo string, data []byte, clientIDs ...string) (string, error) {
 	if s.store.ConfigBool("mirrorOnly", false) {
 		return "", fmt.Errorf("%w: mirror-only mode", ErrInvalidAction)
 	}
 	caption = strings.TrimSpace(caption)
 	if len([]rune(caption)) > 4000 {
 		return "", fmt.Errorf("%w: caption is too long", ErrInvalidAction)
+	}
+	outgoingID, already, release, err := s.beginOutgoing(ctx, chat, caption, "image", replyTo, clientIDs)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	if already {
+		return outgoingID, nil
 	}
 	details, err := inspectImage(data)
 	if err != nil {
@@ -154,7 +162,7 @@ func (s *Service) SendImage(ctx context.Context, chat, caption, replyTo string, 
 	}
 	imageMsg := &waE2E.ImageMessage{Caption: proto.String(caption), Mimetype: proto.String(details.mime), URL: proto.String(uploaded.URL), DirectPath: proto.String(uploaded.DirectPath), MediaKey: uploaded.MediaKey, FileEncSHA256: uploaded.FileEncSHA256, FileSHA256: uploaded.FileSHA256, FileLength: proto.Uint64(uploaded.FileLength), Width: proto.Uint32(uint32(details.width)), Height: proto.Uint32(uint32(details.height)), JPEGThumbnail: details.thumbnail, ContextInfo: reply}
 	outgoing := &waE2E.Message{ImageMessage: imageMsg}
-	resp, err := transport.SendMessage(ctx, jid, outgoing)
+	resp, err := transport.SendMessage(ctx, jid, outgoing, outgoingExtra(outgoingID)...)
 	if err != nil {
 		return "", err
 	}

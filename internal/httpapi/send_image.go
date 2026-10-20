@@ -67,7 +67,7 @@ func (s *Server) sendImage(w http.ResponseWriter, r *http.Request, chat string) 
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
-	id, err := s.wa.SendImage(ctx, chat, caption, reply, data)
+	id, err := s.wa.SendImage(ctx, chat, caption, reply, data, r.Header.Get("X-Wisp-Message-ID"))
 	if err != nil {
 		code := 502
 		if errors.Is(err, whatsapp.ErrInvalidAction) {

@@ -1,5 +1,6 @@
 import './components/wisp-chat-picker.js';
 import './components/wisp-chat-controls.js';
+import {sessionOutbox} from './services/outbox.js';
 import { sessionDrafts } from './core/drafts.js';
 import { chatMuted, muteLabel } from './core/chat-state.js';
 import { createViewHistory } from './services/view-history.js';
@@ -115,7 +116,7 @@ function applyChatState(p){
  const previous=state.chatStates.get(p.chat_id);
  if(previous&&previous.version>=p.version)return;
  state.chatStates.set(p.chat_id,p);
- const cleared=sessionDrafts.invalidate(p.chat_id,p.draft_revision);
+ const cleared=sessionDrafts.invalidate(p.chat_id,p.draft_revision);sessionOutbox.invalidate(p.chat_id,p.draft_revision);
  if(p.closed||cleared)state.unread.delete(p.chat_id);
  if(p.closed&&state.searchResults){state.searchResults={chats:state.searchResults.chats.filter(c=>c.id!==p.chat_id),messages:state.searchResults.messages.filter(m=>m.chat_id!==p.chat_id)}}
  $('#chatPicker')?.requestUpdate();
@@ -465,7 +466,7 @@ function wireShell(){
   once('#back','click',()=>{if(state.view==='gallery'&&!state.imageViewer){if(!viewHistory.closeGallery())returnFromGallery();return}backToSelection()});
   once('#messages','message-notice',event=>showToast(event.detail.message,event.detail.kind));
   once('#composer','image-sent',event=>followSentImage(event.detail));
-  const messages=$('#messages');if(messages&&!messages.dataset.imageWired){messages.dataset.imageWired='true';messages.addEventListener('image-open',event=>openImageViewer(event.detail));for(const event of ['animationend','animationcancel'])messages.addEventListener(event,e=>{if(e.target===messages&&e.animationName==='chat-message-enter')app.classList.remove('chat-revealing')})}
+  const messages=$('#messages');if(messages&&!messages.dataset.imageWired){messages.dataset.imageWired='true';messages.addEventListener('outbox-preview-ready',e=>sessionOutbox.completePreview(e.detail.id));messages.addEventListener('outbox-retry',event=>{if(state.connection.state==='connected'&&state.sendEnabled&&!state.mirrorOnly)void sessionOutbox.retry(event.detail.id)});messages.addEventListener('image-open',event=>openImageViewer(event.detail));for(const event of ['animationend','animationcancel'])messages.addEventListener(event,e=>{if(e.target===messages&&e.animationName==='chat-message-enter')app.classList.remove('chat-revealing')})}
   once('#settingsBtn','click',openSettings);
   once('#newMessages','click',()=>conversation.scrollBottom());
   once('#mediaBtn','click',()=>{rememberPosition();$('#messages')?.closePanel(false);$('#composer')?.closePicker();return gallery.open('media')});
@@ -498,6 +499,20 @@ viewHistory=createViewHistory({onChange:async target=>{
   if(target.view==='image'&&target.image)openImageViewer(target.image,{history:false});
   if(overlay)showChatControls(overlay);
 }});
+sessionOutbox.subscribe(({type,entry})=>{
+  if(type==='acknowledged'&&entry){
+    void apiJson(`/api/chats/${encodeURIComponent(entry.chatId)}/messages/${encodeURIComponent(entry.serverId||entry.id)}/context`).then(rows=>{
+      if(state.selectedChatId!==entry.chatId)return;
+      const anchor=conversation.captureScrollAnchor(),bottom=conversation.isNearBottom();
+      state.messages=mergeKnownReactions([...new Map([...state.messages,...rows].map(m=>[m.id,m])).values()].sort((a,b)=>a.timestamp-b.timestamp),state.reactionStates);
+      state.messageCache.set(entry.chatId,{messages:[...state.messages],hasOlder:state.hasOlder,at:Date.now()});
+      void conversation.renderMessages().then(()=>{if(state.selectedChatId!==entry.chatId)return;if(bottom)conversation.scrollBottom();else conversation.restoreScrollAnchor(anchor)});
+    }).catch(()=>{});
+  }
+  if(!state.selectedChatId||state.view!=='chat'||state.chatPreparing||(entry&&entry.chatId!==state.selectedChatId))return;
+  const chat=state.selectedChatId,anchor=conversation.captureScrollAnchor(),bottom=conversation.isNearBottom();
+  void conversation.renderMessages().then(()=>{if(state.selectedChatId!==chat||state.view!=='chat')return;if(type==='enqueued'||bottom)conversation.scrollBottom({initial:true,force:true});else conversation.restoreScrollAnchor(anchor)});
+});
 navigation.installGlobalListeners();
 pwa=createPwaService({store,apiJson,onStateChange:()=>{if(state.settingsOpen)renderSettings()},onError:message=>showToast(message)});
 pwa.start();
@@ -511,7 +526,7 @@ bus.on('live:reaction',data=>updateReactionView(data).catch(console.error));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){syncReactions().catch(()=>{});void loadStatus({render:false}).then(()=>loadChats()).catch(()=>{})}});
 bus.on('live:update',update=>{state.update=update;syncSettings();renderUpdateNotice()});
 bus.on('live:connection',next=>{state.connection=next;renderShell()});
-bus.on('live:message',async m=>{m=mergeKnownReactions([m],state.reactionStates)[0];const atBottom=conversation.isNearBottom(),c=state.chats.find(x=>x.id===m.chat_id);if(c){c.last_message_id=m.id;c.last_message_at=m.timestamp;c.last_body=m.body;c.last_type=m.type;c.last_from_me=m.from_me;c.last_sender_name=m.sender_name;state.chats.sort((a,b)=>(b.last_message_at||0)-(a.last_message_at||0));renderChatList();renderConversationHeader()}else{loadChats({render:false}).then(()=>{renderChatList();renderConversationHeader()}).catch(()=>{})}if(state.selectedChatId===m.chat_id&&app.classList.contains('open')){if(!state.messages.some(x=>x.id===m.id)){state.messages.push(m);state.messageCache.set(m.chat_id,{messages:[...state.messages],hasOlder:state.hasOlder,at:Date.now()});if(state.view==='chat'){await conversation.renderMessages();if(atBottom||imageScrollIntent?.messageId===m.id){const ownImage=imageScrollIntent?.messageId===m.id;conversation.scrollBottom(ownImage?{initial:true,force:true}:{});if(ownImage)imageScrollIntent=null}else{state.newWhileReading++;conversation.updateNewButton()}}if(earlyMediaEvents.delete(m.id)){refreshSelectedMessages().catch(()=>{})}}return}if(m.from_me||state.chatStates.get(m.chat_id)?.closed)return;state.unread.set(m.chat_id,(state.unread.get(m.chat_id)||0)+1);renderChatList();if(state.mirrorOnly&&state.followNewMessages&&!state.chatPickerOpen&&!m.silent&&!chatMuted(state.chatStates.get(m.chat_id))&&!state.chatStates.get(m.chat_id)?.closed){selectChat(m.chat_id)}});
+bus.on('live:message',async m=>{const localEcho=sessionOutbox.list(m.chat_id).some(e=>(e.serverId||e.id)===m.id);sessionOutbox.observe(m);m=mergeKnownReactions([m],state.reactionStates)[0];const atBottom=conversation.isNearBottom(),c=state.chats.find(x=>x.id===m.chat_id);if(c){c.last_message_id=m.id;c.last_message_at=m.timestamp;c.last_body=m.body;c.last_type=m.type;c.last_from_me=m.from_me;c.last_sender_name=m.sender_name;state.chats.sort((a,b)=>(b.last_message_at||0)-(a.last_message_at||0));renderChatList();renderConversationHeader()}else{loadChats({render:false}).then(()=>{renderChatList();renderConversationHeader()}).catch(()=>{})}if(state.selectedChatId===m.chat_id&&app.classList.contains('open')){if(!state.messages.some(x=>x.id===m.id)){state.messages.push(m);state.messageCache.set(m.chat_id,{messages:[...state.messages],hasOlder:state.hasOlder,at:Date.now()});if(state.view==='chat'){await conversation.renderMessages();if(atBottom||imageScrollIntent?.messageId===m.id){const ownImage=imageScrollIntent?.messageId===m.id;conversation.scrollBottom(ownImage?{initial:true,force:true}:{});if(ownImage)imageScrollIntent=null}else if(!localEcho){state.newWhileReading++;conversation.updateNewButton()}}if(earlyMediaEvents.delete(m.id)){refreshSelectedMessages().catch(()=>{})}}return}if(m.from_me||state.chatStates.get(m.chat_id)?.closed)return;state.unread.set(m.chat_id,(state.unread.get(m.chat_id)||0)+1);renderChatList();if(state.mirrorOnly&&state.followNewMessages&&!state.chatPickerOpen&&!m.silent&&!chatMuted(state.chatStates.get(m.chat_id))&&!state.chatStates.get(m.chat_id)?.closed){selectChat(m.chat_id)}});
 bus.on('live:media',async d=>{
   if(state.selectedChatId!==d.chatId)return;
   if(state.view==='gallery'){gallery.refresh();return}

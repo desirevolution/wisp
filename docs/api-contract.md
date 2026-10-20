@@ -160,3 +160,13 @@ showing that the latest check was unavailable.
 
 These settings are stored under reserved `chat-state:` keys in the existing
 `app_config` table. Schema 150 is retained; no database reset is needed.
+
+
+## Optimistic sending and retries
+
+Text and image send endpoints accept optional `X-Wisp-Message-ID` (`3EB0` plus
+18 uppercase hex digits). The client uses that ID for its pending row and reuses
+it for an explicit retry. A matching stored outgoing message is returned without
+a second transport send; conflicting reuse is rejected. Requests without the
+header remain compatible. `{ok:true,id}` means WhatsApp acknowledged the send,
+not that the recipient received or read it. See [outbox.md](outbox.md).

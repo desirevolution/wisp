@@ -76,8 +76,8 @@ try{
   await page.keyboard.press('Escape');await page.waitForFunction(()=>document.querySelector('#emojiPicker').hidden);
   assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');assert.ok(await page.locator('.reply-draft').isVisible());
  }
- failSend=true;await page.locator('#sendBtn').click();await page.getByText('Test send failure',{exact:true}).waitFor();assert.ok(await page.locator('.reply-draft').isVisible());assert.equal(await page.locator('#composerInput').inputValue(),'Entwurf A');
- failSend=false;await page.locator('#sendBtn').click();await page.waitForFunction(()=>document.querySelector('#composerInput').value==='');assert.equal(sent.at(-1).reply_to,'m1');assert.equal(await page.locator('.reply-draft').count(),0);
+ failSend=true;await page.locator('#sendBtn').click();await page.getByText('Test send failure',{exact:true}).waitFor();assert.equal(await page.locator('.reply-draft').count(),0);assert.equal(await page.locator('#composerInput').inputValue(),'');
+ failSend=false;await page.getByRole('button',{name:'Retry send',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.outbox-status.failed'));assert.equal(sent.at(-1).reply_to,'m1');assert.equal(await page.locator('.reply-draft').count(),0);
  await row('m1').hover();await row('m1').getByRole('button',{name:'React to message',exact:true}).click();await page.locator('.message-popover:popover-open').waitFor();
  assert.equal(await page.locator('.message-popover .popover-close').isVisible(),false);
  assert.equal(await page.locator('.message-popover .emoji-grid button').count(),33);
@@ -109,9 +109,9 @@ try{
  await page.locator('#imageFile').setInputFiles({name:'pixel.png',mimeType:'image/png',buffer:await readFile('tests/fixtures/pixel.png')});
  await page.locator('.image-draft').waitFor();
  failSend=true;await page.locator('#sendBtn').click();await page.getByText('Test image send failure',{exact:true}).waitFor();
- assert.ok(await page.locator('.image-draft').isVisible());assert.ok(await page.locator('.reply-draft').isVisible());
- assert.equal(await page.locator('#composerInput').inputValue(),'My image caption');
- failSend=false;await page.locator('#sendBtn').click();await page.waitForFunction(()=>!document.querySelector('.image-draft'));
+ assert.equal(await page.locator('.image-draft').count(),0);assert.equal(await page.locator('.reply-draft').count(),0);
+ assert.equal(await page.locator('#composerInput').inputValue(),'');
+ failSend=false;await page.getByRole('button',{name:'Retry send',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.outbox-status.failed'));
  assert.ok(imageSent.at(-1).includes('My image caption'));assert.ok(imageSent.at(-1).includes('m1'));
  assert.equal(await page.locator('#composerInput').inputValue(),'');
 
@@ -263,10 +263,9 @@ try{
  const cameraGate=new Promise(resolve=>{releaseCameraSend=resolve});
  await mobile.page.route('**/send-image',async route=>{await cameraGate;await route.continue()});
  await mobile.page.locator('#sendBtn').click();
- await mobile.page.locator('.send-progress').waitFor();
- assert.match(await mobile.page.locator('.send-progress').textContent(),/WhatsApp confirmation/);
- assert.equal(await mobile.page.locator('#sendBtn').isDisabled(),true);
- releaseCameraSend();await mobile.page.waitForFunction(()=>!document.querySelector('.image-draft'));
+ await mobile.page.locator('.outbox-status').waitFor();
+ assert.equal(await mobile.page.locator('#composerInput').isDisabled(),false);assert.equal(await mobile.page.locator('.image-draft').count(),0);
+ const cameraResponse=mobile.page.waitForResponse(r=>r.url().endsWith('/send-image'));releaseCameraSend();await cameraResponse;await mobile.page.waitForFunction(()=>!document.querySelector('.outbox-status'));
  await mobile.page.unroute('**/send-image');
  assert.equal(await mobile.page.locator('#composerInput').inputValue(),'');
  console.log(`Camera photo: ${cameraBytes.length} -> ${optimizedSize} bytes; 3200x2400 -> 2048x1536; held send remains visible`);

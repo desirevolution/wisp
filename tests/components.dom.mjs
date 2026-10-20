@@ -14,6 +14,7 @@ win.HTMLElement.prototype.showPopover=function(){this.setAttribute('data-test-op
 win.HTMLElement.prototype.hidePopover=function(){this.removeAttribute('data-test-open')};
 await import('../frontend/src/components/wisp-composer.js');
 await import('../frontend/src/components/wisp-message-list.js');
+const {sessionOutbox}=await import('../frontend/src/services/outbox.js');
 const {sessionDrafts}=await import('../frontend/src/core/drafts.js');
 const composer=document.createElement('wisp-composer');composer.chatId='a';document.body.append(composer);await composer.updateComplete;
 function input(text){composer.input.value=text;composer.input.dispatchEvent(new Event('input',{bubbles:true}))}
@@ -24,10 +25,10 @@ composer.chatId='b';await composer.updateComplete;assert.equal(composer.input.va
 composer.chatId='a';await composer.updateComplete;assert.equal(composer.input.value,'answer');assert.ok(composer.querySelector('.reply-draft'));
 composer.input.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await composer.updateComplete;assert.equal(composer.querySelector('.reply-draft'),null);assert.equal(composer.input.value,'answer');
 composer.setReply(original);await composer.updateComplete;
-globalThis.fetch=async()=>({ok:false,json:async()=>({error:'Failed'})});await composer.send();assert.equal(composer.input.value,'answer');assert.ok(composer.querySelector('.reply-draft'));assert.equal(composer.draft.error,'Failed');
+globalThis.fetch=async()=>({ok:false,json:async()=>({error:'Failed'})});await composer.send();assert.equal(composer.input.value,'');assert.equal(composer.querySelector('.reply-draft'),null);assert.equal(sessionOutbox.list('a').at(-1).error,'Failed');input('answer');composer.setReply(original);await composer.updateComplete;
 let finish;const requests=[];
 globalThis.fetch=async(url,options)=>{requests.push(JSON.parse(options.body));return new Promise(resolve=>{finish=()=>resolve({ok:true,json:async()=>({ok:true,id:'sent'})})})};
-const sending=composer.send();assert.ok(composer.draft.sending);composer.chatId='b';await composer.updateComplete;finish();await sending;
+const sending=composer.send();assert.equal(composer.draft.text,'');assert.equal(composer.draft.sending,false);composer.chatId='b';await composer.updateComplete;while(!finish)await new Promise(done=>setTimeout(done,0));finish();await sending;
 assert.equal(composer.input.value,'other');assert.equal(sessionDrafts.get('a').text,'');assert.equal(sessionDrafts.get('a').reply,null);assert.equal(requests[0].reply_to,'m');
 composer.remove();const restored=document.createElement('wisp-composer');restored.chatId='b';document.body.append(restored);await restored.updateComplete;assert.equal(restored.input.value,'other');restored.remove();
 console.log('Composer DOM: quotes, Escape, drafts, failure and chat-switch during send passed');

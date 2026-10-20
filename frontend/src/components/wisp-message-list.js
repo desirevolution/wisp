@@ -67,7 +67,7 @@ export class WispMessageList extends LitElement {
   disconnectedCallback(){this.cancelPress();this._heldClick=null;this.closePanel(false);document.removeEventListener('pointermove',this._pressMove);document.removeEventListener('pointerup',this._pressEnd);document.removeEventListener('pointercancel',this._pressEnd);this.removeEventListener('click',this._clickAfterHold,true);document.removeEventListener('pointerdown',this._outside);window.removeEventListener('resize',this._resize);this.removeEventListener('scroll',this._scroll);super.disconnectedCallback()}
   mobile(){return window.matchMedia('(max-width:700px)').matches}
   canCopyImage(m){return ['image','sticker'].includes(m.type)&&m.has_media&&m.media_id&&m.media_status==='ready'}
-  canAct(m){return !m.deleted&&(this.sendEnabled||Boolean(m.body)||this.canCopyImage(m))}
+  canAct(m){return !m.outbox&&!m.deleted&&(this.sendEnabled||Boolean(m.body)||this.canCopyImage(m))}
   cancelPress(){if(this._press)clearTimeout(this._press.timer);this._press=null}
   startPress(event,message){
     this.cancelPress();this._heldClick=null;
@@ -191,6 +191,7 @@ export class WispMessageList extends LitElement {
   _retry(messageId){this.dispatchEvent(new CustomEvent('retry-media',{detail:{messageId},bubbles:true,composed:true}))}
   _media(m){
     if(!m.has_media)return null;
+    if(m.local_image_url)return html`<div class="media-frame" style=${this.mediaFrame(m)}><img class="outbox-image-preview" src=${m.local_image_url} alt=${m.body||'Image to send'} @load=${e=>this.mediaReady(e,m)}>${m.server_image_ready?html`<img class="inline-image" src=${`/api/media/${encodeURIComponent(m.media_id)}`} alt=${m.body||'Image'} @load=${async e=>{await this.mediaReady(e,m);this.emit('outbox-preview-ready',{id:m.outbox.id})}}>`:nothing}</div>`;
     const visual=['image','sticker','video','gif'].includes(m.type);
     const frame=visual?this.mediaFrame(m):'';
     if(m.media_status==='pending'||!m.media_status)return visual?html`<div class="media-placeholder media-frame" style=${frame}><span class="media-frame-status">${mediaLabel(m.type)} · loading…</span></div>`:html`<div class="media-placeholder">${mediaLabel(m.type)} · loading…</div>`;
@@ -237,15 +238,16 @@ export class WispMessageList extends LitElement {
         const inlineTime=Boolean(m.body)&&(!m.deleted||this.expanded.has(m.id));
         return html`${showDay?html`<div class="date-separator"><span>${dayLabel(m.timestamp)}</span></div>`:null}
           <div class="message-row ${m.from_me?'outgoing':''} ${grouped?'grouped':'group-start'}">
-            <div class="message-stack"><div class="bubble ${m.from_me?'me':''} ${m.has_media?'media-bubble':''} ${!m.deleted&&!m.edited&&m.has_media&&!m.body&&!m.reply?'media-only':''}" data-message-id=${m.id} tabindex=${this.canAct(m)?'0':nothing} aria-label=${this.canAct(m)?'Message. Long press or press Shift+F10 for actions':nothing} @pointerdown=${e=>this.startPress(e,m)} @contextmenu=${e=>this.messageContext(e,m)} @keydown=${e=>this.messageKey(e,m)}>
+            <div class="message-stack"><div class="bubble ${m.outbox?'local-outgoing':''} ${m.from_me?'me':''} ${m.has_media?'media-bubble':''} ${!m.outbox&&!m.deleted&&!m.edited&&m.has_media&&!m.body&&!m.reply?'media-only':''}" data-message-id=${m.id} tabindex=${this.canAct(m)?'0':nothing} aria-label=${this.canAct(m)?'Message. Long press or press Shift+F10 for actions':nothing} @pointerdown=${e=>this.startPress(e,m)} @contextmenu=${e=>this.messageContext(e,m)} @keydown=${e=>this.messageKey(e,m)}>
               ${this.canAct(m)?html`<button class="message-more-action" type="button" aria-label="Message actions" title="Message actions" aria-haspopup="dialog" aria-expanded=${this.menu?.id===m.id&&this.menu?.mode==='more'} @click=${e=>this.openPanel('more',m,e)}>${icon('chevronDown')}</button>`:nothing}
               ${this.isGroup&&!grouped&&!m.from_me&&m.sender_name&&!rawId(m.sender_name)?html`<div class="sender">${m.sender_name}</div>`:null}
               ${m.deleted?html`<div class="deleted-label">Message deleted</div>${m.type!=='deleted'?html`<button class="deleted-toggle" aria-expanded=${this.expanded.has(m.id)} @click=${()=>this.toggleDeleted(m.id)}>${this.expanded.has(m.id)?'Hide deleted message':'Show deleted message'}</button>`:null}`:null}
               ${!m.deleted||this.expanded.has(m.id)?html`${m.reply?this.quote(m.reply,`quote:${m.id}`):null}${this._media(m)}${m.body?html`<div class="body"><span class="message-text">${unsafeHTML(linkify(m.body))}</span>${this.timestamp(m,true)}</div>`:null}${this.editHistory(m)}`:null}
               ${!inlineTime?this.timestamp(m):null}
+              ${m.outbox&&m.outbox.status!=='confirmed'?html`<div class="outbox-status ${m.outbox.status==='failed'?'failed':''}" role="status">${m.outbox.status==='failed'?html`<span>${m.outbox.error}</span><button type="button" @click=${()=>this.emit('outbox-retry',{id:m.outbox.id})}>Retry send</button>`:html`<span class="sync-spinner" aria-hidden="true"></span><span>${m.outbox.status==='queued'?'Waiting to send…':'Sending…'}</span>`}</div>`:nothing}
             </div>
             ${!m.deleted||this.expanded.has(m.id)?this.reactionChips(m):null}</div>
-            ${this.sendEnabled&&!m.deleted?html`<div class="message-actions"><button type="button" class="reaction-action desktop-message-action" aria-label="React to message" title="Add reaction" ?disabled=${this.pendingReactions.has(m.id)} @click=${e=>this.openPanel('picker',m,e)}>${icon('smile')}</button></div>`:nothing}
+            ${this.sendEnabled&&!m.deleted&&!m.outbox?html`<div class="message-actions"><button type="button" class="reaction-action desktop-message-action" aria-label="React to message" title="Add reaction" ?disabled=${this.pendingReactions.has(m.id)} @click=${e=>this.openPanel('picker',m,e)}>${icon('smile')}</button></div>`:nothing}
           </div>`;
       })}
       ${this.renderPanel()}

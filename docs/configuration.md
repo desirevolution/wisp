@@ -59,7 +59,7 @@ The message JSON contract is documented in [api-contract.md](api-contract.md).
 - Incoming media: default 100 MiB; image uploads: 10 MiB and 20 megapixels,
   independently of the incoming-media setting.
 - One PNG/JPEG per outgoing image message; text/caption limit 4,000 characters.
-- Image/text/reply drafts are in browser memory and disappear on page reload.
+- Text/reply drafts are retained on this device. Unsent composer image attachments stay in memory; queued outgoing snapshots use local device storage, including images when IndexedDB is available.
 - Received reactions may contain any emoji; creation uses the 33-emoji subset (including the quick-reaction defaults).
 - There is no automatic chat/media retention policy. Monitor available disk space.
 

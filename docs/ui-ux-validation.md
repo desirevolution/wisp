@@ -317,3 +317,21 @@ Hover keeps the bubble's position and size unchanged; keyboard focus reveals
 the same controls. Reply is the first dropdown item and opens the reply draft.
 Mirror mode exposes only copy actions. Existing clipboard/image, Escape,
 message layout and mobile long-press regression suites remain in place.
+
+
+Optimistic outbox update (20 October 2026):
+
+- Unit checks cover immutable snapshots, per-chat serialization, stable-ID
+  retry, early live echo followed by HTTP failure, explicit recovery after
+  reload, chat isolation and remote-close revision invalidation.
+- DOM tests now assert immediate draft clearing and a usable next composer
+  during text/image requests; errors live in the outbox, not the next draft.
+- Browser coverage at 1200px and 390px holds actual requests while asserting
+  pending rows, free composer, preserved reply snapshot, ordered sends, an
+  early SSE echo without duplication and an untouched new draft after retry.
+  Image Blobs survive reload in IndexedDB; recovery reuses the original ID.
+- Go tests verify text/image retry IDs, rejection of mismatched/invalid IDs
+  and concurrent duplicate requests resulting in one transport send.
+- Existing upload-scroll, cross-chat response, camera, menu, clipboard,
+  reduced-motion and chat-preparation regressions remain in the browser suite.
+- Live WhatsApp acknowledgement/delivery and physical PWA checks remain manual.

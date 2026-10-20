@@ -11,6 +11,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
+	"sync"
 	"testing"
 	"time"
 	"wisp/internal/model"
@@ -23,12 +24,16 @@ type captureSender struct {
 
 func (*captureSender) IsConnected() bool { return true }
 func (*captureSender) IsLoggedIn() bool  { return true }
-func (s *captureSender) SendMessage(ctx context.Context, j types.JID, m *waE2E.Message, _ ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
+func (s *captureSender) SendMessage(ctx context.Context, j types.JID, m *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
 	if s.fail {
 		return whatsmeow.SendResponse{}, errors.New("provider failed")
 	}
 	s.messages = append(s.messages, proto.Clone(m).(*waE2E.Message))
-	return whatsmeow.SendResponse{ID: "sent", Timestamp: time.Now()}, nil
+	id := "sent"
+	if len(extra) > 0 && extra[0].ID != "" {
+		id = extra[0].ID
+	}
+	return whatsmeow.SendResponse{ID: id, Timestamp: time.Now()}, nil
 }
 func sendingService(t *testing.T) (*Service, *captureSender) {
 	s := mentionService(t)
@@ -220,5 +225,60 @@ func TestRevokeOnlyEmitsDeletionAndReactionNamesMatch(t *testing.T) {
 	s.decorateReactions(context.Background(), rows)
 	if rows[0].ActorName != "Arthur" {
 		t.Fatal(rows)
+	}
+}
+
+func TestOutgoingIdentityRetryDoesNotSendTwice(t *testing.T) {
+	s, sender := sendingService(t)
+	id := "3EB0000000000000000001"
+	first, err := s.SendText(context.Background(), "g@g.us", "hello", "", id)
+	if err != nil || first != id {
+		t.Fatalf("first %q: %v", first, err)
+	}
+	second, err := s.SendText(context.Background(), "g@g.us", "hello", "", id)
+	if err != nil || second != id || len(sender.messages) != 1 {
+		t.Fatalf("retry %q: %v sends=%d", second, err, len(sender.messages))
+	}
+	if _, err = s.SendText(context.Background(), "g@g.us", "changed", "", id); err == nil {
+		t.Fatal("ID reuse must reject a changed payload")
+	}
+	if _, err = s.SendText(context.Background(), "g@g.us", "hello", "", "invalid"); err == nil {
+		t.Fatal("invalid ID accepted")
+	}
+}
+
+func TestConcurrentOutgoingRetrySharesOneSend(t *testing.T) {
+	s, sender := sendingService(t)
+	id := "3EB0000000000000000002"
+	var workers sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			got, err := s.SendText(context.Background(), "g@g.us", "same", "", id)
+			if err != nil || got != id {
+				t.Errorf("got %q: %v", got, err)
+			}
+		}()
+	}
+	workers.Wait()
+	if len(sender.messages) != 1 {
+		t.Fatalf("sent %d copies", len(sender.messages))
+	}
+}
+func TestOutgoingImageRetrySharesOneSend(t *testing.T) {
+	s, _ := sendingService(t)
+	s.mediaRoot = t.TempDir()
+	sender := &captureImageSender{}
+	s.sender = sender
+	id := "3EB0000000000000000003"
+	for i := 0; i < 2; i++ {
+		got, err := s.SendImage(context.Background(), "g@g.us", "caption", "original", testPNG(t), id)
+		if err != nil || got != id {
+			t.Fatalf("got %q: %v", got, err)
+		}
+	}
+	if len(sender.messages) != 1 {
+		t.Fatalf("sent %d images", len(sender.messages))
 	}
 }

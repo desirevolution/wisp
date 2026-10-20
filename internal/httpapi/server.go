@@ -443,7 +443,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 		defer cancel()
-		msgID, err := s.wa.SendText(ctx, id, body.Text, body.ReplyTo)
+		msgID, err := s.wa.SendText(ctx, id, body.Text, body.ReplyTo, r.Header.Get("X-Wisp-Message-ID"))
 		if err != nil {
 			code := 502
 			if errors.Is(err, whatsapp.ErrInvalidAction) {
