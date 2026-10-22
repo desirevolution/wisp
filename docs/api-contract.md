@@ -35,9 +35,34 @@ MQTT message payload:
   "chatName": "Family",
   "senderName": "Max",
   "isGroup": true,
-  "text": "See you soon"
+  "text": "Image",
+  "body": "",
+  "type": "image",
+  "hasMedia": true,
+  "messageId": "3EB0EXAMPLE",
+  "chatId": "family@g.us",
+  "timestamp": 1792692000
 }
 ```
+
+Messages are published on `<topicPrefix>/message` with QoS 1, not retained.
+`type` uses Wisp's message kinds (`chat`, `image`, `video`, `audio`, `ptt`,
+`document`, `sticker`; `gif` is also recognized by the fallback formatter).
+`hasMedia` indicates a media attachment, not a completed download.
+`messageId` and `chatId` identify the message and chat; `timestamp` is the original
+message timestamp in Unix seconds. Use the IDs to recognize possible QoS 1 retries.
+
+`body` is the unmodified stored message text/caption (or a document filename when
+that is the stored body). `text` retains that exact value when nonblank. Otherwise
+it contains an English fallback: `Image`, `Video`, `Audio`, `Voice message`,
+`Document`, `Sticker`, `GIF`, or `Message`. Thus a captionless image no longer
+produces an empty `text`; consumers needing the original empty caption should
+read `body`. Node-RED can use `type` for localized wording or media-specific routing.
+
+Events use the initial live metadata and do not wait for a download. They contain
+no binary content or media download URLs. Existing chat/sender fields, captioned
+messages, plain text and topic/QoS remain compatible. Outgoing and muted messages
+remain excluded; offline handling is described in [operations](operations.md#mqtt-connection-and-delivery-diagnostics).
 
 The gallery endpoints only expose media that is already `ready` and locally
 available. Historical media downloads are lazy and may emit media updates over

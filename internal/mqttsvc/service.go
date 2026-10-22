@@ -37,6 +37,12 @@ type MessagePayload struct {
 	SenderName string `json:"senderName"`
 	IsGroup    bool   `json:"isGroup"`
 	Text       string `json:"text"`
+	Body       string `json:"body"`
+	Type       string `json:"type"`
+	HasMedia   bool   `json:"hasMedia"`
+	MessageID  string `json:"messageId"`
+	ChatID     string `json:"chatId"`
+	Timestamp  int64  `json:"timestamp"`
 }
 type Status struct {
 	Enabled            bool   `json:"enabled"`
@@ -138,7 +144,8 @@ func (s *Service) Reload() {
 		SetClientID(fmt.Sprintf("wisp-%d", time.Now().UnixNano())).
 		SetAutoReconnect(true).SetConnectRetry(true).SetConnectRetryInterval(5 * time.Second).
 		SetMaxReconnectInterval(30 * time.Second).SetConnectTimeout(5 * time.Second).
-		SetKeepAlive(20 * time.Second).SetPingTimeout(5 * time.Second).SetWriteTimeout(5 * time.Second)
+		SetKeepAlive(20 * time.Second).SetPingTimeout(5 * time.Second).SetWriteTimeout(5 * time.Second).
+		SetStore(newSnapshotPacketStore())
 	if user != "" {
 		opts.SetUsername(user)
 		opts.SetPassword(pass)
@@ -360,13 +367,49 @@ func (s *Service) handle(event events.Event) {
 	switch event.Type {
 	case "message":
 		if m, ok := event.Data.(model.Message); ok && m.FromMe == 0 && !m.Silent && !s.st.ChatMuted(m.ChatID) {
-			sender := ""
-			if m.SenderName != nil {
-				sender = *m.SenderName
-			}
-			s.publish("message", 1, false, MessagePayload{ChatName: s.st.ChatName(m.ChatID), SenderName: sender, IsGroup: s.st.ChatType(m.ChatID) == "group", Text: m.Body})
+			s.publish("message", 1, false, s.messagePayload(m))
 		}
 	case "connection":
 		s.publish("status", 1, true, event.Data)
+	}
+}
+
+// Text remains useful for existing notification/TTS consumers; Body preserves
+// the unmodified stored text or caption for consumers that need the distinction.
+// Build this from live message metadata, without waiting for a media download.
+func (s *Service) messagePayload(m model.Message) MessagePayload {
+	sender := ""
+	if m.SenderName != nil {
+		sender = *m.SenderName
+	}
+	kind := m.Type
+	if kind == "" {
+		kind = "chat"
+	}
+	text := m.Body
+	if strings.TrimSpace(text) == "" {
+		switch kind {
+		case "image":
+			text = "Image"
+		case "video":
+			text = "Video"
+		case "gif":
+			text = "GIF"
+		case "audio":
+			text = "Audio"
+		case "ptt":
+			text = "Voice message"
+		case "document":
+			text = "Document"
+		case "sticker":
+			text = "Sticker"
+		default:
+			text = "Message"
+		}
+	}
+	return MessagePayload{
+		ChatName: s.st.ChatName(m.ChatID), SenderName: sender, IsGroup: s.st.ChatType(m.ChatID) == "group",
+		Text: text, Body: m.Body, Type: kind, HasMedia: m.HasMedia != 0,
+		MessageID: m.ID, ChatID: m.ChatID, Timestamp: m.Timestamp,
 	}
 }

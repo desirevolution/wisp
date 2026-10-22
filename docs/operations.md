@@ -172,3 +172,9 @@ startup without a broker, broker restart, a silent peer detected by keepalive,
 missing PUBACK recovery, 200-message bursts, callback ordering and shutdown during
 connection retries. These tests contact only loopback and send no real WhatsApp
 messages or production MQTT events.
+
+
+MQTT's per-client in-memory protocol store keeps encoded packet snapshots. Each
+reconnect reader receives a separate packet, avoiding Paho's shared-pointer race
+between setting the retransmit DUP flag and writing a packet. This remains an
+in-memory store, not a persistent replay queue.
