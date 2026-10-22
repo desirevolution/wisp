@@ -84,6 +84,40 @@ try{
   await m.waitForTimeout(short?80:520);await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
  };
  assert.equal(await row(m,'in').locator('.message-actions').isVisible(),false);
+ // Keep a real touch down while the sheet appears, then slide over its emoji.
+ // Release must not activate, select, or dismiss newly inserted content.
+ await m.evaluate(()=>{
+  window.holdReactions=[];
+  window.holdReactionHandler=e=>{window.holdReactions.push(e.detail.emoji);e.stopImmediatePropagation()};
+  document.querySelector('#messages').addEventListener('reaction-set',window.holdReactionHandler,true);
+ });
+ for(const target of ['.quick-reactions button','.sheet-message-preview span','.message-sheet-backdrop']){
+  await bubble(m,'in').scrollIntoViewIfNeeded();
+  const start=await bubble(m,'in').locator('.message-text').boundingBox();
+  await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:start.x+20,y:start.y+8}]});
+  await m.locator('.message-sheet:popover-open').waitFor();
+  assert.equal(await m.locator('.message-sheet').evaluate(el=>el.inert),true,'The original touch must not interact with the new sheet');
+  assert.equal(await m.locator('.sheet-message-preview span').evaluate(el=>getComputedStyle(el).userSelect),'none');
+  const destination=await m.locator(target).first().boundingBox();
+  const x=target.includes('backdrop')?10:destination.x+destination.width/2,y=target.includes('backdrop')?30:destination.y+destination.height/2;
+  await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y}]});
+  await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await m.waitForFunction(()=>document.querySelector('.message-sheet')&&!document.querySelector('.message-sheet').inert);
+  // Exercise a delayed compatibility click after touchend as well. It can be
+  // delivered to a different top-layer target by mobile browser versions.
+  assert.equal(await m.locator(target).first().evaluate(el=>el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,detail:1}))),false);
+  assert.equal(await m.locator('.message-sheet').count(),1);
+  assert.equal(await m.evaluate(()=>window.getSelection().toString()),'');
+  assert.deepEqual(await m.evaluate(()=>window.holdReactions),[]);
+  assert.equal(await m.locator('.reply-draft').count(),0);
+  // A separate fresh tap is accepted immediately, without an arbitrary delay.
+  await m.locator('.quick-reactions button').first().tap();
+  await m.waitForFunction(()=>!document.querySelector('.message-sheet'));
+  assert.equal(await m.evaluate(()=>window.holdReactions.length),1);
+  await m.evaluate(()=>window.holdReactions=[]);
+ }
+ await m.evaluate(()=>document.querySelector('#messages').removeEventListener('reaction-set',window.holdReactionHandler,true));
+
  await m.evaluate(()=>localStorage.removeItem('recentEmojis'));await press('in');await m.locator('.message-sheet:popover-open').waitFor();
  assert.deepEqual(await m.locator('.quick-reactions button').allTextContents(),['👍','❤️','😂','😮','😢','🙏']);assert.equal(await m.getByRole('button',{name:'Reply',exact:true}).count(),0);
  await m.getByRole('button',{name:'More emojis',exact:true}).click();assert.ok(await m.locator('.sheet-reactions wisp-emoji-picker').isVisible());await m.getByRole('button',{name:'Back to reactions',exact:true}).click();
@@ -105,5 +139,5 @@ try{
   assert.deepEqual(readonly.errors,[]);await readonly.context.close();
  }
  assert.equal(mutations,0,'Copy actions must not mutate WhatsApp or send messages');
- console.log('Message actions: desktop reaction plus top-right bubble menu, Reply first; text and PNG clipboard; download fallback; real touch hold/tap/scroll/link; compact/recent/full/options sheets; keyboard and mirror mode passed');
+ console.log('Message actions: desktop reaction plus top-right bubble menu, Reply first; text and PNG clipboard; download fallback; real touch hold/release over emoji/text/backdrop, immediate next tap, scroll/link; compact/recent/full/options sheets; keyboard and mirror mode passed');
 }finally{await browser?.close();server.closeAllConnections();await new Promise(done=>server.close(done))}

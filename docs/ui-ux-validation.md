@@ -335,3 +335,19 @@ Optimistic outbox update (20 October 2026):
 - Existing upload-scroll, cross-chat response, camera, menu, clipboard,
   reduced-motion and chat-preparation regressions remain in the browser suite.
 - Live WhatsApp acknowledgement/delivery and physical PWA checks remain manual.
+
+### Mobile long-press release guard
+
+A message sheet opened by holding a touch is inert until that touch ends or is
+canceled. Capture handlers suppress native touch-end defaults, context menus and
+compatibility clicks from the opening gesture, including clicks retargeted to
+top-layer content. Touch opening focuses the dialog after release rather than a
+menu action. The sheet disables native text selection/callouts. A fresh pointer
+down clears the guard immediately; it does not impose a delay on the next tap.
+
+`tests/browser-message-actions.spec.mjs` keeps a real CDP touch down while the
+sheet opens, moves it over an emoji, preview text or backdrop, releases it and
+checks that nothing is selected, activated or dismissed. It also checks delayed
+compatibility clicks and an immediately following intentional emoji tap. Existing
+short-tap image opening, link holding, scrolling, copy/reply and keyboard tests
+remain covered.

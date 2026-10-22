@@ -21,9 +21,21 @@ export class WispMessageList extends LitElement {
 
   constructor(){super();this._mediaFrames=new Map();this.messages=[];this.hasOlder=false;this.loading=false;this.hasSelection=false;this.isGroup=false;this.loadingOlder=false;this.olderError=false;this.sendEnabled=false;this.pendingReactions=new Set();this.menu=null;this.expanded=new Set();
     this._pressMove=e=>{if(this._press&&(e.pointerId!==this._press.pointerId||Math.hypot(e.clientX-this._press.x,e.clientY-this._press.y)>10))this.cancelPress()};
-    this._pressEnd=()=>{this.cancelPress();if(this._heldClick)this._heldClick.until=performance.now()+800};
-    this._clickAfterHold=e=>{if(this._heldClick&&performance.now()<this._heldClick.until){e.preventDefault();e.stopImmediatePropagation();this._heldClick=null}};
-    this._outside=e=>{this._heldClick=null;if(this._press&&e.pointerId!==this._press.pointerId)this.cancelPress();const panel=this.querySelector('.message-popover');if(this.menu&&!e.composedPath().includes(panel)&&!e.composedPath().includes(this._anchor))this.closePanel()};
+    this._pressEnd=e=>{
+      this.cancelPress();
+      const held=this._heldClick;
+      if(!held||(held.pointerId!=null&&held.pointerId!==e.pointerId))return;
+      if(e.cancelable)e.preventDefault();
+      held.active=false;held.until=performance.now()+800;
+      window.getSelection()?.removeAllRanges();this.requestUpdate();
+      void this.updateComplete.then(()=>{if(this._heldClick===held&&this.menu?.mode==='actions')this.querySelector('.message-sheet')?.focus({preventScroll:true})});
+    };
+    // Some mobile browsers target the newly inserted top-layer content on release.
+    // Cancel the native touch default too: blocking click alone cannot stop selection.
+    this._touchEndAfterHold=e=>{if(this.holdBlocked()){if(e.cancelable)e.preventDefault();window.getSelection()?.removeAllRanges()}};
+    this._contextAfterHold=e=>{if(this.holdBlocked()){e.preventDefault();e.stopImmediatePropagation()}};
+    this._clickAfterHold=e=>{if(this.holdBlocked()&&(this._heldClick.active||e.detail!==0)){e.preventDefault();e.stopImmediatePropagation()}};
+    this._outside=e=>{if(this._heldClick){this._heldClick=null;this.requestUpdate()};if(this._press&&e.pointerId!==this._press.pointerId)this.cancelPress();const panel=this.querySelector('.message-popover');if(this.menu&&!e.composedPath().includes(panel)&&!e.composedPath().includes(this._anchor))this.closePanel()};
     this._viewportWidth=window.innerWidth;
     this._resize=()=>{
       const width=window.innerWidth, widthChanged=width!==this._viewportWidth;
@@ -63,11 +75,12 @@ export class WispMessageList extends LitElement {
   }
   mediaFailed(event){const el=event.currentTarget;el.classList.add('media-failed');const label=el.parentElement?.querySelector('.media-frame-status');if(label)label.textContent='Media could not be displayed.'}
 
-  connectedCallback(){super.connectedCallback();document.addEventListener('pointerdown',this._outside);window.addEventListener('resize',this._resize);this.addEventListener('scroll',this._scroll);document.addEventListener('pointermove',this._pressMove,{passive:true});document.addEventListener('pointerup',this._pressEnd);document.addEventListener('pointercancel',this._pressEnd);this.addEventListener('click',this._clickAfterHold,true)}
-  disconnectedCallback(){this.cancelPress();this._heldClick=null;this.closePanel(false);document.removeEventListener('pointermove',this._pressMove);document.removeEventListener('pointerup',this._pressEnd);document.removeEventListener('pointercancel',this._pressEnd);this.removeEventListener('click',this._clickAfterHold,true);document.removeEventListener('pointerdown',this._outside);window.removeEventListener('resize',this._resize);this.removeEventListener('scroll',this._scroll);super.disconnectedCallback()}
+  connectedCallback(){super.connectedCallback();document.addEventListener('pointerdown',this._outside);window.addEventListener('resize',this._resize);this.addEventListener('scroll',this._scroll);document.addEventListener('pointermove',this._pressMove,{passive:true});document.addEventListener('pointerup',this._pressEnd,true);document.addEventListener('pointercancel',this._pressEnd,true);document.addEventListener('touchend',this._touchEndAfterHold,{capture:true,passive:false});document.addEventListener('contextmenu',this._contextAfterHold,true);document.addEventListener('click',this._clickAfterHold,true)}
+  disconnectedCallback(){this.cancelPress();this._heldClick=null;this.closePanel(false);document.removeEventListener('pointermove',this._pressMove);document.removeEventListener('pointerup',this._pressEnd,true);document.removeEventListener('pointercancel',this._pressEnd,true);document.removeEventListener('touchend',this._touchEndAfterHold,true);document.removeEventListener('contextmenu',this._contextAfterHold,true);document.removeEventListener('click',this._clickAfterHold,true);document.removeEventListener('pointerdown',this._outside);window.removeEventListener('resize',this._resize);this.removeEventListener('scroll',this._scroll);super.disconnectedCallback()}
   mobile(){return window.matchMedia('(max-width:700px)').matches}
   canCopyImage(m){return ['image','sticker'].includes(m.type)&&m.has_media&&m.media_id&&m.media_status==='ready'}
   canAct(m){return !m.outbox&&!m.deleted&&(this.sendEnabled||Boolean(m.body)||this.canCopyImage(m))}
+  holdBlocked(){return this._heldClick&&performance.now()<this._heldClick.until}
   cancelPress(){if(this._press)clearTimeout(this._press.timer);this._press=null}
   startPress(event,message){
     this.cancelPress();this._heldClick=null;
@@ -77,15 +90,15 @@ export class WispMessageList extends LitElement {
     this._press={pointerId:event.pointerId,x:event.clientX,y:event.clientY,timer:setTimeout(()=>{
       this._press=null;
       if(!anchor.isConnected||this.inert)return;
-      this._heldClick={id:message.id,until:Infinity};
+      this._heldClick={id:message.id,pointerId:event.pointerId,active:true,until:Infinity};
       window.getSelection()?.removeAllRanges();
       void this.openPanel('actions',message,{currentTarget:anchor});
     },450)};
   }
   messageContext(event,message){
     if(!this.mobile()||!this.canAct(message)||event.target.closest('button,input,textarea,audio,video'))return;
-    event.preventDefault();this.cancelPress();
-    this._heldClick={id:message.id,until:Infinity};
+    const press=this._press;event.preventDefault();this.cancelPress();
+    this._heldClick={id:message.id,pointerId:press?.pointerId,active:Boolean(press),until:press?Infinity:performance.now()+800};
     if(this.menu?.id!==message.id)void this.openPanel('actions',message,{currentTarget:event.currentTarget});
   }
   messageKey(event,message){
@@ -129,7 +142,7 @@ export class WispMessageList extends LitElement {
     const panel=this.querySelector('.message-popover');if(!panel||this.menu?.id!==message.id)return;
     panel.showPopover?.();
     const picker=panel.querySelector('wisp-emoji-picker');if(picker)await picker.updateComplete;
-    if(this.menu?.mode==='actions'){panel.querySelector('.message-sheet-content button:not(:disabled)')?.focus({preventScroll:true});return}
+    if(this.menu?.mode==='actions'){if(!this._heldClick?.active)(this._heldClick?panel:panel.querySelector('.message-sheet-content button:not(:disabled)'))?.focus({preventScroll:true});return}
     const rect=this._anchor.getBoundingClientRect(),box=panel.getBoundingClientRect();
     const width=document.documentElement.clientWidth,height=window.visualViewport?.height || window.innerHeight;
     const leftBound=this.menu.mode==='more'?Math.max(8,Math.min(this.getBoundingClientRect().left+8,width-box.width-8)):8;
@@ -173,7 +186,7 @@ export class WispMessageList extends LitElement {
     const m=this.messages.find(x=>x.id===this.menu.id);if(!m)return null;
     const own=(m.reactions||[]).find(r=>r.from_me),sheet=this.menu.mode==='actions',view=this.menu.view;
     const recent=[...new Set([...recentEmojis(),'👍','❤️','😂','😮','😢','🙏'])].slice(0,6);
-    return html`<div class="message-popover ${sheet?'message-sheet':this.menu.mode==='more'?'message-options':''}" popover="manual" role="dialog" tabindex="-1" aria-modal=${sheet?'true':nothing} aria-label=${sheet||this.menu.mode==='more'?'Message actions':this.menu.mode==='picker'?'React to message':'Reactions'} @keydown=${this.panelKey}>
+    return html`<div class="message-popover ${sheet?'message-sheet':this.menu.mode==='more'?'message-options':''}" popover="manual" role="dialog" tabindex="-1" aria-modal=${sheet?'true':nothing} ?inert=${sheet&&Boolean(this._heldClick?.active)} aria-label=${sheet||this.menu.mode==='more'?'Message actions':this.menu.mode==='picker'?'React to message':'Reactions'} @keydown=${this.panelKey}>
       ${sheet?html`
         <button class="message-sheet-backdrop" tabindex="-1" aria-label="Close message actions" @click=${()=>this.closePanel()}></button>
         <section class="message-sheet-content">

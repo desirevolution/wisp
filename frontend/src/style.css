@@ -596,3 +596,6 @@ dialog.chat-controls::backdrop{background:#0009}
 .read-mode-setting select:focus-visible{outline:2px solid #7ca99e;outline-offset:2px}
 .read-mode-hint{color:#b8c7ce;font-size:13px;line-height:1.5;margin:4px 0 12px}
 @media(max-width:600px){.read-mode-setting select{width:100%}}
+
+/* Long-press release must not select the text/emoji that appears beneath it. */
+.message-sheet,.message-sheet *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
