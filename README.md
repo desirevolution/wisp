@@ -10,12 +10,6 @@ A lightweight, self-hosted WhatsApp companion with a responsive web UI, messagin
 - Read private/group chats with history, search, media and contact names.
 - Send text, replies, PNG/JPEG images and reactions from the shared emoji subset.
 - On mobile, use the camera button to take a photo with the native device dialog.
-  Large camera photos are optimized locally to JPEG (85% quality, up to 2048 px
-  on the longest side) before the preview, when this reduces file size. A visible
-  sending status stays until WhatsApp confirms the send. The ordinary image picker
-  and pasted images retain their original files; PNG/JPEG and the 10 MiB limit
-  still apply. Camera selection depends on the browser/device; the image picker
-  remains available.
 - Show received reactions, edits and deletion markers, including stored context.
 - Receive live SSE updates, install the PWA and optionally enable per-device Web Push.
 - See the installed release version in Settings or via `--version`, with daily
@@ -28,8 +22,8 @@ proxy; Wisp has no built-in login or user permissions.
 ## Screenshots
 
 <p align="center">
-  <a href="screenshots/wisp-desktop.png?v=4" target="_blank">
-    <img src="screenshots/wisp-desktop.png?v=4" width="1200" alt="Desktop">
+  <a href="screenshots/wisp-desktop.png?v=5" target="_blank">
+    <img src="screenshots/wisp-desktop.png?v=5" width="1200" alt="Desktop">
   </a>
   <br>
   <sub><b>Desktop</b></sub>
@@ -38,12 +32,27 @@ proxy; Wisp has no built-in login or user permissions.
 <br>
 
 <p align="center">
-  <a href="screenshots/wisp-mobile.png?v=4" target="_blank">
-    <img src="screenshots/wisp-mobile.png?v=4" width="400" alt="Mobile">
+  <a href="screenshots/wisp-mobile.png?v=5" target="_blank">
+    <img src="screenshots/wisp-mobile.png?v=5" width="400" alt="Mobile">
   </a>
   <br>
   <sub><b>Mobile</b></sub>
 </p>
+
+## Chat presentation
+
+Chat changes use a quiet loading surface for at least 150 ms while the next
+conversation is laid out and positioned out of view. The composer is disabled
+until the chat is ready. Cached messages can be shown without waiting for the
+server refresh; the latest selected chat wins during rapid switching.
+
+Image/video previews reserve their original aspect ratio before downloading, using
+retained WhatsApp dimensions for both new and existing messages. Small images are
+not enlarged. Only missing dimensions use a fixed 3:2 frame; the complete image
+fits inside without cropping. Downloaded dimensions are remembered for later chat visits within the current browser
+session. If dimensions were missing, the temporary frame adjusts once after decoding
+while preserving the reading anchor or the bottom position. Known frames remain
+stable. Draft previews also follow the image aspect ratio.
 
 ## Docker quick start
 
@@ -107,6 +116,17 @@ npm ci
 npx playwright install chromium
 npm run check
 ```
+
+To check only backend module preloading and the Linux AMD64/ARM64 builds:
+
+```sh
+sh scripts/check-go-targets.sh
+```
+
+This uses a fresh temporary module cache and first downloads/verifies all pinned
+modules with only `go.mod` and `go.sum` present, as in the Docker backend stage.
+The subsequent cross-builds use `-mod=readonly` with module downloads disabled.
+The full check also runs this test.
 
 Or run the same checks inside Docker:
 

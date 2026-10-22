@@ -433,6 +433,14 @@ wisp-composer{display:block;grid-row:3;min-width:0}
 .media-ready>.media-frame-status{visibility:hidden}
 .media-frame.failed{padding:0}
 .media-frame.failed .retry-media{justify-self:center;min-height:44px}
+/* Captions wrap to the media width; narrow originals keep a readable text area. */
+wisp-message-list.messages{container-type:inline-size}
+.bubble.visual-caption{width:min(calc(max(180px,var(--media-frame-width,420px)) + 8px),78cqi,calc(100cqi - 42px))}
+.bubble.visual-caption>.media-frame{margin-inline:auto}
+.bubble.visual-caption>.body{min-width:0;width:100%;max-width:100%;overflow-wrap:anywhere}
+.bubble.visual-caption .message-text,.bubble.visual-caption .msg-link{overflow-wrap:anywhere;word-break:normal}
+@media(hover:none),(pointer:coarse){.bubble.visual-caption{width:min(calc(max(180px,var(--media-frame-width,420px)) + 8px),92cqi)}}
+
 
 .quote-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
 .quote-thumbnail{width:52px;height:52px;flex:0 0 52px;object-fit:cover;border-radius:4px;background:#111b21}
@@ -570,3 +578,21 @@ dialog.chat-controls::backdrop{background:#0009}
 
 @media(min-width:701px){.bubble.local-outgoing:not(.media-bubble){padding-right:36px}}
 .bubble .media-frame>.outbox-image-preview{position:absolute;inset:0;object-fit:contain}
+
+.push-test-panel{margin-top:12px;border-top:1px solid var(--border,#2a3942);padding-top:12px}
+.push-test-panel .setting-row{flex-wrap:wrap;align-items:flex-start}
+.push-test-panel .setting-row>div{flex:1 1 220px}
+.push-test-panel button{min-height:44px}
+.push-test-panel [role="alert"]{color:#ffb4ab;overflow-wrap:anywhere}
+.push-test-results{max-height:260px;overflow:auto;font-size:13px;overflow-wrap:anywhere}
+.push-test-results p{line-height:1.5;color:#c6d4dc}
+.push-test-results ul{list-style:none;padding:0;margin:8px 0}
+.push-test-results li{padding:8px 0;border-top:1px solid #2a3942}
+
+/* Read preferences fit the settings dialog at narrow mobile widths. */
+.read-mode-setting{flex-wrap:wrap;gap:10px}
+.read-mode-setting>div{flex:1 1 220px;min-width:0}
+.read-mode-setting select{font:inherit;background:#202c33;color:#e9edef;border:1px solid #52636d;border-radius:7px;padding:9px;max-width:100%;min-width:0}
+.read-mode-setting select:focus-visible{outline:2px solid #7ca99e;outline-offset:2px}
+.read-mode-hint{color:#b8c7ce;font-size:13px;line-height:1.5;margin:4px 0 12px}
+@media(max-width:600px){.read-mode-setting select{width:100%}}

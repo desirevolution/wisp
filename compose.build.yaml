@@ -22,6 +22,7 @@ services:
       - ./data:/data
     environment:
       TZ: ${TZ:-Etc/UTC}
+      WISP_PUSH_TEST_ENABLED: "${WISP_PUSH_TEST_ENABLED:-false}"
       WISP_LISTEN: ":8080"
       WISP_DATA_DIR: /data
       # Optional deployment-managed settings override values from the UI/SQLite:

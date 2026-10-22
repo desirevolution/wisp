@@ -1,6 +1,6 @@
 FROM node:24-bookworm-slim AS node
 FROM golang:1.26-bookworm AS go
-FROM mcr.microsoft.com/playwright:v1.62.1-noble
+FROM mcr.microsoft.com/playwright:v1.64.1-noble
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
@@ -14,11 +14,11 @@ WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod download all && go mod verify
 COPY cmd ./cmd
 COPY internal ./internal
 COPY frontend ./frontend
 COPY scripts ./scripts
 COPY tests ./tests
-COPY README.md CHANGELOG.md ./
+COPY README.md ./
 CMD ["./scripts/check.sh"]

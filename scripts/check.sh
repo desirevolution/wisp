@@ -28,5 +28,6 @@ go vet ./...
 CGO_ENABLED=1 go test -race ./internal/events ./internal/store ./internal/whatsapp ./internal/httpapi ./internal/pushsvc ./internal/mqttsvc
 CGO_ENABLED=0 go build -buildvcs=false -trimpath -o "$backup/wisp" ./cmd/wisp
 "$backup/wisp" --version
+sh scripts/check-go-targets.sh
 npm run test:browser
 printf '%s\n' 'All automated checks passed. Live WhatsApp and Docker architecture smoke tests remain manual.'

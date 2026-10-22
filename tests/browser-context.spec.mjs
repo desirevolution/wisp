@@ -16,6 +16,8 @@ const server = createServer(async (req,res) => {
  const url=new URL(req.url,'http://local');
  const json=(data,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data))};
  if(url.pathname==='/outside-wisp'){res.writeHead(200,{'content-type':'text/html'});res.end('<h1>Outside Wisp</h1>');return}
+ const captionImage=/^\/api\/media\/caption-(\d+)x(\d+)$/.exec(url.pathname);
+ if(captionImage){res.writeHead(200,{'content-type':'image/svg+xml'});res.end(`<svg xmlns="http://www.w3.org/2000/svg" width="${captionImage[1]}" height="${captionImage[2]}"><rect width="100%" height="100%" fill="#238b88"/></svg>`);return}
  if(url.pathname==='/api/media/demo-portrait'){res.writeHead(200,{'content-type':'image/svg+xml'});res.end('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="800"><rect width="200" height="800" fill="#238b88"/></svg>');return}
  if(url.pathname==='/api/status')return json({whatsapp:{state:'connected'},send:{enabled:!mirror}});
  if(url.pathname==='/api/config')return json({sendEnabled:!mirror,mirrorOnly:mirror,followNewMessages:false});
@@ -602,4 +604,38 @@ try{
   await quotePage.close();
  }
  console.log('Image reply thumbnails: decoded image, fixed dimensions and no overflow on desktop/mobile passed');
+ // Text must not widen a portrait/small image bubble. A narrow original stays
+ // centered in the caption minimum; wide images shrink with the viewport.
+ for(const width of [1200,390,320]){
+  const p=await browser.newPage({viewport:{width,height:850},isMobile:width<700,hasTouch:width<700});await p.goto(base);
+  await p.waitForFunction(()=>customElements.get('wisp-message-list'));
+  await p.evaluate(async()=>{
+   const list=document.createElement('wisp-message-list');list.id='caption-layout-check';list.className='messages';list.style.cssText='position:fixed;inset:0;width:100%;z-index:9999;overflow:auto';list.chatId='caption';list.hasSelection=true;list.isGroup=true;document.body.append(list);await list.updateComplete;
+  });
+  for(const fromMe of [0,1])for(const [w,h] of [[600,1200],[200,800],[64,64],[1600,900]]){
+   await p.evaluate(async({fromMe,w,h})=>{
+    const list=document.querySelector('#caption-layout-check');list.chatId=`caption-${fromMe}-${w}x${h}`;list.messages=[{id:'caption-image',chat_id:'caption',type:'image',has_media:1,media_id:`caption-${w}x${h}`,media_status:'ready',media_width:w,media_height:h,from_me:fromMe,sender_name:'Bea',timestamp:1790760000,body:'A caption with multiple words and a long link: https://example.com/'+('longpath'.repeat(35)),reactions:[]}];await list.updateComplete;
+    await list.querySelector('img').decode();await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
+   },{fromMe,w,h});
+   const bounds=await p.evaluate(()=>{
+    const bubble=document.querySelector('#caption-layout-check .bubble'),frame=bubble.querySelector('.media-frame'),body=bubble.querySelector('.body');
+    const rect=el=>{const r=el.getBoundingClientRect();return {x:r.x,width:r.width,right:r.right}};
+    return {bubble:rect(bubble),frame:rect(frame),body:rect(body),scroll:body.scrollWidth,client:body.clientWidth,fit:getComputedStyle(frame.querySelector('img')).objectFit};
+   });
+   const target=Math.min(420,360*w/h,w);
+   assert.ok(bounds.bubble.right<=width+1,JSON.stringify({width,w,h,bounds}));
+   assert.ok(Math.abs(bounds.bubble.width-(Math.max(180,bounds.frame.width)+8))<2||bounds.bubble.width<188,JSON.stringify({width,w,h,bounds}));
+   assert.ok(Math.abs((bounds.bubble.x+bounds.bubble.width/2)-(bounds.frame.x+bounds.frame.width/2))<1,JSON.stringify(bounds));
+   assert.ok(bounds.scroll<=bounds.client+1,JSON.stringify(bounds));assert.equal(bounds.fit,'contain');
+   if(width===1200)assert.ok(Math.abs(bounds.bubble.width-(Math.max(180,target)+8))<2,JSON.stringify(bounds));
+   if(process.env.WISP_CAPTION_QA&&width===390&&fromMe===1&&w===600)await p.screenshot({path:process.env.WISP_CAPTION_QA});
+  }
+  // Learned dimensions update both frame and caption width together.
+  await p.evaluate(async()=>{
+   const list=document.querySelector('#caption-layout-check');list.messages=[{id:'unknown-caption',chat_id:'caption',type:'image',has_media:1,media_id:'caption-200x801',media_status:'ready',from_me:1,timestamp:1790760000,body:'Unknown size until decoding. '+('Words '.repeat(20))}];await list.updateComplete;await list.querySelector('img').decode();
+  });
+  await p.waitForFunction(()=>document.querySelector('#caption-layout-check .bubble').offsetWidth<200);
+  await p.close();
+ }
+ console.log('Caption width: desktop/mobile, portrait/tiny/landscape, both sides, long URLs, centering and decoded-size updates passed');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}

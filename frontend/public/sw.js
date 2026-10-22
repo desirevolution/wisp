@@ -7,10 +7,10 @@ self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new
 self.addEventListener('push', event => {
   let data = { title: 'Wisp', body: 'New message' };
   try { data = { ...data, ...event.data.json() }; } catch {}
-  const tag = data.messageId ? JSON.stringify([data.chatId || '', data.messageId]) : undefined;
+  const tag = data.testId ? JSON.stringify(['push-test',data.testId]) : data.messageId ? JSON.stringify([data.chatId || '', data.messageId]) : undefined;
   event.waitUntil(self.registration.showNotification(data.title, {
     body: data.body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png',
-    tag, renotify: false, data: { chatId: data.chatId, messageId: data.messageId },
+    tag, renotify: false, data: { chatId: data.chatId, messageId: data.messageId, ...(data.testId?{testId:data.testId}:{}) },
   }));
 });
 

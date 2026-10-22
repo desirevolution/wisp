@@ -59,3 +59,13 @@ test('subscription change registers replacement before deleting old endpoint', a
   await x.emit('pushsubscriptionchange', { oldSubscription: { endpoint: 'old' }, newSubscription: { endpoint: 'new' } });
   assert.deepEqual(x.synced, [['POST', { endpoint: 'new' }], ['DELETE', { endpoint: 'old' }]]);
 });
+test('test notifications have unique tags and open the app without a fake chat', async () => {
+  const x = setup();
+  for (const testId of ['test-one', 'test-two']) {
+    await x.emit('push', { data: { json: () => ({ title: 'Test', body: 'Test', testId }) } });
+  }
+  assert.notEqual(x.notifications[0].tag, x.notifications[1].tag);
+  assert.equal(x.notifications[0].data.testId, 'test-one');
+  await x.emit('notificationclick', { notification: { close() {}, data: x.notifications[0].data } });
+  assert.equal(new URL(x.opened[0]).search, '');
+});

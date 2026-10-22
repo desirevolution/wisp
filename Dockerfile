@@ -8,8 +8,10 @@ RUN npm run build
 
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS backend
 WORKDIR /src
-COPY go.mod go.sum* ./
-RUN go mod download
+COPY go.mod go.sum ./
+# Download the complete pinned graph, including indirect modules, before the
+# source/build layers. This also fills missing package checksums in the builder.
+RUN go mod download all && go mod verify
 COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=frontend /src/public ./internal/webui/public
@@ -26,7 +28,7 @@ RUN set -eux; \
       *) goarm="" ;; \
     esac; \
     CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="$arch" GOARM="$goarm" \
-      go build -trimpath -ldflags="-s -w -X wisp/internal/appconfig.Version=$VERSION" -o /out/wisp ./cmd/wisp
+      go build -mod=readonly -trimpath -ldflags="-s -w -X wisp/internal/appconfig.Version=$VERSION" -o /out/wisp ./cmd/wisp
 
 # Export only the executable, never the complete builder filesystem.
 # This stage stays native even when TARGETOS is Windows.

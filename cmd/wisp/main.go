@@ -51,6 +51,7 @@ func main() {
 		mirrorOnly = *cfg.MirrorOnly
 	}
 	st.SetConfigOverride("mirrorOnly", strconv.FormatBool(mirrorOnly))
+	st.SetConfigOverride("pushTestEnabled", strconv.FormatBool(cfg.PushTestEnabled))
 	mqttEnabled := false
 	if cfg.MQTTEnabled != nil {
 		mqttEnabled = *cfg.MQTTEnabled

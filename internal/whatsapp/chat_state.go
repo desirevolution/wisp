@@ -26,6 +26,9 @@ func (s *Service) publishLiveMessage(m model.Message) {
 		}
 	}
 	s.bus.Publish(buspkg.Event{Type: "message", Data: m})
+	if err == nil && m.FromMe == 0 {
+		s.bus.Publish(buspkg.Event{Type: "unread", Data: p})
+	}
 }
 
 type ChatOption struct {

@@ -12,6 +12,7 @@ import (
 var Version = "dev"
 
 type Config struct {
+	PushTestEnabled                                         bool
 	Listen, DataDir, DBPath, WhatsAppDBPath, PublicDir      string
 	InitialChatLimit, InitialMessagesPerChat, MaxMediaMB    int
 	MediaDir                                                string
@@ -104,8 +105,12 @@ func Parse(args []string) (Config, error) {
 	}
 	public, _ := envFirst("WISP_PUBLIC_DIR", "PUBLIC_DIR")
 	c := Config{Listen: listen, DataDir: data, DBPath: db, WhatsAppDBPath: wadb, MediaDir: media, PublicDir: public, InitialChatLimit: envInt([]string{"WISP_INITIAL_CHAT_LIMIT", "INITIAL_CHAT_LIMIT"}, 10), InitialMessagesPerChat: envInt([]string{"WISP_INITIAL_MESSAGES_PER_CHAT", "INITIAL_MESSAGES_PER_CHAT"}, 50), MaxMediaMB: envInt([]string{"WISP_MAX_MEDIA_MB", "MAX_MEDIA_MB"}, 100), MQTTEnabled: envBool("WISP_MQTT_ENABLED"), MQTTBroker: envStringPtr("WISP_MQTT_BROKER"), MQTTUsername: envStringPtr("WISP_MQTT_USERNAME"), MQTTPassword: envStringPtr("WISP_MQTT_PASSWORD"), MQTTTopicPrefix: envStringPtr("WISP_MQTT_TOPIC_PREFIX"), MirrorOnly: envBool("WISP_MIRROR_ONLY")}
+	if enabled := envBool("WISP_PUSH_TEST_ENABLED"); enabled != nil {
+		c.PushTestEnabled = *enabled
+	}
 	fs := flag.NewFlagSet("wisp", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	fs.BoolVar(&c.PushTestEnabled, "push-test-enabled", c.PushTestEnabled, "enable test Web Push broadcasts (default false)")
 	fs.StringVar(&c.Listen, "listen", c.Listen, "HTTP listen address")
 	fs.StringVar(&c.DataDir, "data-dir", c.DataDir, "data directory")
 	fs.StringVar(&c.DBPath, "db", c.DBPath, "Wisp SQLite database")

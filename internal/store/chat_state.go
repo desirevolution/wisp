@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,9 +12,17 @@ import (
 // Chat state is Wisp-only. Keep it in app_config so existing databases need no
 // schema migration, and retain draft tombstones even when a chat is pruned.
 const chatStatePrefix = "chat-state:"
+
+var ErrInvalidReadSequence = errors.New("invalid read sequence")
+
 const openChatSQL = `NOT EXISTS (SELECT 1 FROM app_config p WHERE p.key='chat-state:'||c.id AND json_extract(p.value,'$.closed')=1)`
 
 type ChatState struct {
+	UnreadSequence int64  `json:"unread_sequence"`
+	ReadSequence   int64  `json:"read_sequence"`
+	LastIncomingID string `json:"last_incoming_id"`
+	FirstUnreadID  string `json:"first_unread_id"`
+
 	ChatID        string `json:"chat_id"`
 	Closed        bool   `json:"closed"`
 	MuteUntil     int64  `json:"mute_until"` // -1 forever, 0 off, otherwise Unix seconds
@@ -88,6 +97,11 @@ func (s *Store) ChangeChatState(chat, action string, until int64) (ChatState, er
 	switch action {
 	case "close":
 		p.Closed = true
+		p.ReadSequence = p.UnreadSequence
+		p.FirstUnreadID = ""
+		if _, err = tx.Exec(`DELETE FROM unread_messages WHERE chat_id=?`, chat); err != nil {
+			return p, err
+		}
 		p.DraftRevision++
 	case "open":
 		p.Closed = false
@@ -139,4 +153,56 @@ func (s *Store) OpenChat(chat, name, kind string) error {
 	now := time.Now().Unix()
 	_, err := s.DB.Exec(`INSERT INTO chats(id,name,type,last_message_at,created_at,updated_at) VALUES(?,?,?,0,?,?) ON CONFLICT(id) DO NOTHING`, chat, name, kind, now, now)
 	return err
+}
+
+// MarkChatRead acknowledges only a previously observed sequence. Older requests
+// cannot clear newer arrivals or move a shared read position backwards.
+func (s *Store) MarkChatRead(chat string, through int64) (ChatState, error) {
+	return s.markChatRead(chat, through, false)
+}
+
+// MarkChatReadAndSync atomically acknowledges Wisp messages and queues only the
+// newly acknowledged range. Repeated requests and remote echoes never send again.
+func (s *Store) MarkChatReadAndSync(chat string, through int64) (ChatState, error) {
+	return s.markChatRead(chat, through, true)
+}
+func (s *Store) markChatRead(chat string, through int64, syncRead bool) (ChatState, error) {
+	chat = s.ResolveChat(chat)
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return ChatState{}, err
+	}
+	defer tx.Rollback()
+	var exists int
+	if err = tx.QueryRow(`SELECT 1 FROM chats WHERE id=?`, chat).Scan(&exists); err != nil {
+		return ChatState{}, err
+	}
+	p, err := readChatState(tx, chat)
+	if err != nil {
+		return p, err
+	}
+	if through < 0 || through > p.UnreadSequence {
+		return p, ErrInvalidReadSequence
+	}
+	if through > p.ReadSequence {
+		if syncRead {
+			if err = queueReadSync(tx, chat, p.ReadSequence, through); err != nil {
+				return p, err
+			}
+		}
+		p.ReadSequence = through
+		if _, err = tx.Exec(`DELETE FROM unread_messages WHERE chat_id=? AND sequence<=?`, chat, through); err != nil {
+			return p, err
+		}
+		p.FirstUnreadID = ""
+		err = tx.QueryRow(`SELECT message_id FROM unread_messages WHERE chat_id=? ORDER BY sequence LIMIT 1`, chat).Scan(&p.FirstUnreadID)
+		if err != nil && err != sql.ErrNoRows {
+			return p, err
+		}
+		p.Version++
+		if err = writeChatState(tx, p); err != nil {
+			return p, err
+		}
+	}
+	return p, tx.Commit()
 }

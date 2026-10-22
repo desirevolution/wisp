@@ -75,6 +75,7 @@ export function createInitialAppState() {
     galleryKind: 'media',
     searchResults: null,
     followNewMessages: false,
+    readMode: 'wisp',
     mqttEnabled: false, mqttConnected: false, mqttBroker: '', mqttTopicPrefix: 'wisp', mqttUsername: '', mqttPasswordSet: false, managed: {},
     unread: new Map(),
     scrollMode: 'idle',

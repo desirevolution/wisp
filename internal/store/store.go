@@ -77,6 +77,9 @@ CREATE INDEX IF NOT EXISTS idx_media_chat ON media(chat_id,type);
 CREATE INDEX IF NOT EXISTS idx_media_chat_status_type ON media(chat_id,status,type);
 CREATE TABLE IF NOT EXISTS media_payload(message_id TEXT PRIMARY KEY,payload BLOB NOT NULL,FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS app_config(key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS unread_messages(message_id TEXT PRIMARY KEY,chat_id TEXT NOT NULL,sequence INTEGER NOT NULL,FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE);
+CREATE INDEX IF NOT EXISTS idx_unread_messages_chat_sequence ON unread_messages(chat_id,sequence);
+CREATE TABLE IF NOT EXISTS read_sync_jobs(id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id TEXT NOT NULL,mode TEXT NOT NULL,payload TEXT NOT NULL,FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY,subscription_json TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
 `)
 	if e != nil {
@@ -90,6 +93,15 @@ CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY,subscrip
 func (s *Store) Close() error { return s.DB.Close() }
 
 func (s *Store) Save(m model.Message, chatName, chatType string) (bool, error) {
+	return s.save(m, chatName, chatType, false)
+}
+
+// SaveLive counts incoming messages in the same transaction as their first insert.
+// History, restored deletion placeholders, outgoing messages and redelivery do not count.
+func (s *Store) SaveLive(m model.Message, chatName, chatType string) (bool, error) {
+	return s.save(m, chatName, chatType, true)
+}
+func (s *Store) save(m model.Message, chatName, chatType string, live bool) (bool, error) {
 	now := time.Now().Unix()
 	tx, e := s.DB.Begin()
 	if e != nil {
@@ -136,6 +148,30 @@ func (s *Store) Save(m model.Message, chatName, chatType string) (bool, error) {
 	}
 	if e := applyStoredEdits(tx, m.ChatID, m.ID); e != nil {
 		return false, e
+	}
+	if n, _ := res.RowsAffected(); live && n > 0 && m.FromMe == 0 {
+		p, err := readChatState(tx, m.ChatID)
+		if err != nil {
+			return false, err
+		}
+		if p.UnreadSequence == p.ReadSequence {
+			p.FirstUnreadID = m.ID
+		} else if p.FirstUnreadID == "" {
+			// Pre-index Wisp versions retained only the last incoming ID.
+			p.FirstUnreadID = p.LastIncomingID
+			if p.FirstUnreadID == "" {
+				p.FirstUnreadID = m.ID
+			}
+		}
+		p.UnreadSequence++
+		if _, err = tx.Exec(`INSERT INTO unread_messages(message_id,chat_id,sequence) VALUES(?,?,?)`, m.ID, m.ChatID, p.UnreadSequence); err != nil {
+			return false, err
+		}
+		p.LastIncomingID = m.ID
+		p.Version++
+		if err = writeChatState(tx, p); err != nil {
+			return false, err
+		}
 	}
 	if e := tx.Commit(); e != nil {
 		return false, e

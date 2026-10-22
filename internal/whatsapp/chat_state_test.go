@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 	"wisp/internal/model"
+	"wisp/internal/store"
 )
 
 type chooserContacts struct{ wastore.ContactStore }
@@ -53,7 +54,11 @@ func TestMutedLiveMessageRetainsInternalEventWithoutReopening(t *testing.T) {
 	s.store.ChangeChatState(chat, "close", 0)
 	id, ch := s.bus.Subscribe()
 	defer s.bus.Unsubscribe(id)
-	s.publishLiveMessage(model.Message{ID: "new", ChatID: chat, Body: "hello"})
+	m := model.Message{ID: "new", WhatsAppID: "new", ChatID: chat, Type: "chat", Body: "hello"}
+	if _, err := s.store.SaveLive(m, "Group", "group"); err != nil {
+		t.Fatal(err)
+	}
+	s.publishLiveMessage(m)
 	select {
 	case e := <-ch:
 		if e.Type != "message" || !e.Data.(model.Message).Silent {
@@ -61,6 +66,9 @@ func TestMutedLiveMessageRetainsInternalEventWithoutReopening(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("UI sync lost")
+	}
+	if e := <-ch; e.Type != "unread" || e.Data.(store.ChatState).UnreadSequence != 1 {
+		t.Fatal(e)
 	}
 	p, _ := s.store.ChatState(chat)
 	if !p.Closed {

@@ -247,9 +247,11 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
   }
 
   async function highlightMessage(messageId) {
+    const chatId=state.selectedChatId;
     clearInitialTimer();
     state.scrollMode = 'idle';
     await renderMessages();
+    if(state.selectedChatId!==chatId)return;
     const selector = `[data-message-id="${CSS.escape(messageId)}"]`;
     const message = $(selector);
     message?.scrollIntoView({ block: 'center' });

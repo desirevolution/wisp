@@ -20,6 +20,7 @@ import (
 )
 
 type Service struct {
+	testMu                sync.Mutex
 	st                    *store.Store
 	bus                   *events.Bus
 	wg                    sync.WaitGroup
@@ -33,11 +34,13 @@ type Service struct {
 }
 
 type Status struct {
+	TestEnabled   bool `json:"test_enabled"`
 	Available     bool `json:"available"`
 	Subscriptions int  `json:"subscriptions"`
 }
 
 type payload struct {
+	TestID    string `json:"testId,omitempty"`
 	Title     string `json:"title"`
 	Body      string `json:"body"`
 	ChatID    string `json:"chatId"`
@@ -75,7 +78,7 @@ func (s *Service) Close()            { close(s.stop); s.cancel(); s.bus.Unsubscr
 func (s *Service) PublicKey() string { return s.publicKey }
 func (s *Service) Status() Status {
 	subs, _ := s.st.PushSubscriptions()
-	return Status{Available: s.publicKey != "" && s.privateKey != "", Subscriptions: len(subs)}
+	return Status{Available: s.publicKey != "" && s.privateKey != "", Subscriptions: len(subs), TestEnabled: s.st.ConfigBool("pushTestEnabled", false)}
 }
 func (s *Service) Subscribe(raw []byte) error {
 	var sub webpush.Subscription

@@ -34,6 +34,10 @@ const (
 )
 
 type Service struct {
+	readSyncMu    sync.Mutex
+	readWake      chan struct{}
+	readTransport readSyncTransport
+
 	outgoingMu             sync.Mutex
 	outgoingPending        map[string]chan struct{}
 	sender                 messageTransport
@@ -83,7 +87,7 @@ func New(st *store.Store, b *buspkg.Bus, o Options) *Service {
 	if o.InitialMessagesPerChat < 1 {
 		o.InitialMessagesPerChat = defaultInitialMessagesPerChat
 	}
-	return &Service{status: model.Status{State: "starting"}, store: st, bus: b, historyWait: make(map[string]chan struct{}), groupNames: make(map[string]string), mediaRecent: make(map[string]whatsmeow.DownloadableMessage), mediaRetryPending: make(map[string]*mediaRetryAttempt), mediaRoot: o.MediaDir, maxMediaBytes: int64(o.MaxMediaMB) * 1024 * 1024, initialChatLimit: o.InitialChatLimit, initialMessagesPerChat: o.InitialMessagesPerChat}
+	return &Service{readWake: make(chan struct{}, 1), status: model.Status{State: "starting"}, store: st, bus: b, historyWait: make(map[string]chan struct{}), groupNames: make(map[string]string), mediaRecent: make(map[string]whatsmeow.DownloadableMessage), mediaRetryPending: make(map[string]*mediaRetryAttempt), mediaRoot: o.MediaDir, maxMediaBytes: int64(o.MaxMediaMB) * 1024 * 1024, initialChatLimit: o.InitialChatLimit, initialMessagesPerChat: o.InitialMessagesPerChat}
 }
 func (s *Service) Status() model.Status { s.mu.RLock(); defer s.mu.RUnlock(); return s.status }
 func (s *Service) set(p model.Status) {
@@ -120,6 +124,7 @@ func (s *Service) Start(ctx context.Context, path string) error {
 	cl := whatsmeow.NewClient(d, waLog.Stdout("WA", "INFO", true))
 	s.container = c
 	s.client = cl
+	go s.runReadSync(ctx)
 	cl.AddEventHandler(s.handle)
 	if cl.Store.ID == nil {
 		if e = s.startPairing(ctx); e != nil {
@@ -177,6 +182,12 @@ func (s *Service) LogoutAndPair(ctx context.Context) error {
 	if s.client == nil {
 		return errors.New("WhatsApp client is not initialized")
 	}
+	s.readSyncMu.Lock()
+	defer s.readSyncMu.Unlock()
+	// Never carry pending reads into a newly linked WhatsApp account.
+	if err := s.store.CancelReadSync(); err != nil {
+		return err
+	}
 	s.set(model.Status{State: "disconnecting"})
 	if err := s.client.Logout(ctx); err != nil {
 		msg := err.Error()
@@ -210,11 +221,16 @@ func (s *Service) handle(raw any) {
 		initialBootstrap := s.status.InitialBootstrap
 		s.mu.RUnlock()
 		s.set(model.Status{State: "connected", Account: a, InitialBootstrap: initialBootstrap})
+		s.WakeReadSync()
 	case *events.Disconnected:
 		s.set(model.Status{State: "disconnected"})
 	case *events.LoggedOut:
 		x := fmt.Sprint(e.Reason)
 		s.set(model.Status{State: "error", Error: &x})
+	case *events.Receipt:
+		s.onReadReceipt(e)
+	case *events.MarkChatAsRead:
+		s.onChatRead(e)
 	case *events.Message:
 		s.onMessage(e)
 	case *events.HistorySync:
@@ -374,7 +390,7 @@ func (s *Service) onMessage(e *events.Message) {
 	if e.SourceWebMsg != nil {
 		m.HistoryRaw, _ = proto.Marshal(e.SourceWebMsg)
 	}
-	inserted, err := s.store.Save(m, chatName, chatType)
+	inserted, err := s.store.SaveLive(m, chatName, chatType)
 	if err != nil {
 		fmt.Println("[wisp] save message:", err)
 		return

@@ -170,3 +170,17 @@ it for an explicit retry. A matching stored outgoing message is returned without
 a second transport send; conflicting reuse is rejected. Requests without the
 header remain compatible. `{ok:true,id}` means WhatsApp acknowledged the send,
 not that the recipient received or read it. See [outbox.md](outbox.md).
+
+
+## WhatsApp read synchronization
+
+`GET /api/config` includes `readMode`: `wisp` (default), `devices`, or `receipts`.
+`POST /api/config` accepts the same enum; invalid values return 400. The setting
+is shared by all Wisp clients; a `config` SSE event refreshes connected settings.
+`POST /api/chats/:id/read` retains its existing `through_sequence` contract and
+returns Wisp state immediately. In sync modes it atomically queues only newly
+acknowledged indexed messages, without waiting for the WhatsApp network. A 200
+response acknowledges Wisp state, not successful WhatsApp delivery. Failed jobs
+are persisted for retry; changing modes cancels pending jobs from the old mode.
+Incoming own-device reads publish `unread` events and never queue receipts again.
+Closing a chat and loading the overview do not send WhatsApp read receipts.

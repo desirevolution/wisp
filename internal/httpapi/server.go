@@ -88,6 +88,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("/api/config", s.config)
 	m.HandleFunc("/api/push/public-key", s.pushPublicKey)
 	m.HandleFunc("/api/push/subscribe", s.pushSubscribe)
+	m.HandleFunc("/api/push/test", s.pushTest)
 	m.HandleFunc("/api/whatsapp/reconnect", s.whatsappReconnect)
 	m.HandleFunc("/api/whatsapp/logout", s.whatsappLogout)
 	m.HandleFunc("/api/chats", s.chats)
@@ -177,6 +178,7 @@ func (s *Server) configResponse(mirror bool) map[string]any {
 		"sendEnabled":       !mirror,
 		"mirrorOnly":        mirror,
 		"followNewMessages": s.st.ConfigBool("followNewMessages", false),
+		"readMode":          s.st.ReadMode(),
 	}
 }
 func (s *Server) config(w http.ResponseWriter, r *http.Request) {
@@ -190,11 +192,22 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		FollowNewMessages *bool `json:"followNewMessages"`
+		FollowNewMessages *bool   `json:"followNewMessages"`
+		ReadMode          *string `json:"readMode"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&body); err != nil {
 		jsonOut(w, 400, map[string]string{"error": "invalid request body"})
 		return
+	}
+	if body.ReadMode != nil {
+		if !store.ValidReadMode(*body.ReadMode) {
+			jsonOut(w, 400, map[string]string{"error": "Invalid read mode"})
+			return
+		}
+		if err := s.wa.SetReadMode(*body.ReadMode); err != nil {
+			jsonOut(w, 500, map[string]string{"error": "Could not save read mode"})
+			return
+		}
 	}
 	if body.FollowNewMessages != nil {
 		if err := s.st.SetConfigBool("followNewMessages", *body.FollowNewMessages); err != nil {
@@ -203,6 +216,7 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	mirror := s.st.ConfigBool("mirrorOnly", false)
+	s.bus.Publish(events.Event{Type: "config", Data: s.configResponse(mirror)})
 	jsonOut(w, 200, s.configResponse(mirror))
 }
 
@@ -295,6 +309,10 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := urlDecode(parts[0])
+	if len(parts) == 2 && parts[1] == "read" {
+		s.markChatRead(w, r, id)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "state" {
 		s.changeChatState(w, r, id)
 		return
@@ -489,7 +507,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	// operation, so they remain the safe place to heal a detected historical gap.
 	const gapHealThreshold = int64(7 * 24 * 60 * 60)
 	const maxGapHealPages = 12
-	if before != nil {
+	if before != nil && r.URL.Query().Get("localOnly") != "1" {
 		if gap, gapErr := s.st.LargestHistoryGap(id, gapHealThreshold); gapErr != nil {
 			fmt.Printf("[history-gap-fill] detect failed chat=%s: %v\n", id, gapErr)
 		} else if gap != nil {
@@ -535,7 +553,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	// A WhatsApp history page may contain non-visible protocol/control messages.
 	// A partial Wisp page therefore does not mean history ended. Refill until the
 	// browser has a full visible page or WhatsApp explicitly marks history exhausted.
-	if before != nil {
+	if before != nil && r.URL.Query().Get("localOnly") != "1" {
 		for attempt := 1; len(msgs) < limit && !s.st.HistoryExhausted(id) && attempt <= 3; attempt++ {
 			ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 			err := s.wa.FetchOlder(ctx, id, beforeID, *before, limit)

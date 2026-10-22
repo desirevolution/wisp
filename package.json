@@ -8,7 +8,7 @@
     "build": "vite build --config frontend/vite.config.js",
     "test": "node --test tests/*.test.js",
     "test:dom": "node scripts/test-dom.mjs",
-    "test:browser": "node tests/browser-context.spec.mjs && node tests/browser-chat-controls.spec.mjs && node tests/browser-message-actions.spec.mjs && node tests/browser-outbox.spec.mjs",
+    "test:browser": "node tests/browser-context.spec.mjs && node tests/browser-chat-controls.spec.mjs && node tests/browser-message-actions.spec.mjs && node tests/browser-outbox.spec.mjs && node tests/browser-push-test.spec.mjs && node tests/browser-unread.spec.mjs && node tests/browser-first-unread.spec.mjs && node tests/browser-read-sync.spec.mjs",
     "check": "./scripts/check.sh",
     "screenshots": "npm run build && node tests/demo-screenshots.mjs"
   },
@@ -16,9 +16,9 @@
     "lit": "^3.3.3"
   },
   "devDependencies": {
-    "vite": "^7.3.6",
-    "happy-dom": "20.14.5",
-    "playwright": "1.62.1"
+    "happy-dom": "21.0.4",
+    "playwright": "1.64.1",
+    "vite": "8.3.5"
   },
   "description": "A lightweight self-hosted WhatsApp companion"
 }
