@@ -124,3 +124,51 @@ uses URL path rules on all operating systems and a non-redirecting SPA fallback.
 An actual 304 response is conditional-cache validation; it differs from a 301/302
 redirect with a Location header. Keep the full response headers when diagnosing
 a remaining problem.
+
+## MQTT connection and delivery diagnostics
+
+`GET /api/health` includes a `mqtt` object. Its `connected` field reads the live
+MQTT transport state rather than a cached callback flag. The endpoint's overall
+HTTP health result still describes WhatsApp and SQLite; inspect `mqtt.connected`
+separately when monitoring MQTT.
+
+MQTT diagnostics expose:
+
+| Field | Meaning |
+| --- | --- |
+| `enabled`, `connected`, `broker`, `topicPrefix` | Configuration and live connection state. |
+| `published` | Publications acknowledged by the broker, including status updates. Not proof that a downstream subscriber processed them. |
+| `publish_errors` | Publish failures or missing acknowledgments before the deadline. |
+| `skipped_offline` | Eligible message events skipped because MQTT was offline. Muted and outgoing messages do not increase it. |
+| `reconnect_attempts` | Reconnection attempts after a previously open connection was lost. |
+| `last_connected_at`, `last_disconnected_at`, `last_published_at` | UTC timestamps in RFC 3339 format. |
+| `last_error` | Most recent reported error; cleared on successful connection. |
+
+Counters are in memory and reset when Wisp restarts. Message text is not logged.
+Use container logs containing `[mqtt]`: `connect_attempt`, `connect_failed`,
+`connected`, `connection_lost`, `published`, `publish_failed`, `message_skipped`
+and `restart_stopped_client` identify connection and delivery stages. Configured
+passwords are redacted from connection error messages.
+
+Initial connection failures retry every five seconds. Following connection loss,
+Paho reconnects with a maximum 30-second retry interval. Keepalive is 20 seconds,
+ping timeout five seconds, and connect/write timeouts five seconds. QoS 1 publish
+acknowledgments have a ten-second deadline. If a connected peer stops
+acknowledging publications, Wisp disconnects that session; a five-second watchdog
+recreates clients that have stopped reconnecting. A delayed callback from an old
+connection cannot block publications on a live connection or change a replacement
+client's state.
+
+The internal MQTT event subscriptions buffer message bursts without the old
+64-event drop limit. This is an in-memory buffer, not a durable MQTT outbox.
+Events processed while MQTT is offline are counted and skipped, including during
+startup. Already submitted QoS 1 messages may be retried by the MQTT library while
+it reconnects, so downstream consumers should tolerate duplicate delivery.
+Timeouts, client replacement and process restarts do not guarantee replay of
+unconfirmed messages. Chat mute and closed-chat behavior remain unchanged.
+
+Run `go test -race ./internal/mqttsvc` for local TCP broker protocol tests covering
+startup without a broker, broker restart, a silent peer detected by keepalive,
+missing PUBACK recovery, 200-message bursts, callback ordering and shutdown during
+connection retries. These tests contact only loopback and send no real WhatsApp
+messages or production MQTT events.
