@@ -130,7 +130,7 @@
 .send-error{padding:5px 48px 0;color:#ff9b9b;font-size:12px}.send-error[hidden]{display:none}
 .emoji-picker{position:absolute;left:12px;bottom:58px;width:min(330px,calc(100vw - 24px));max-height:310px;overflow:auto;padding:10px;border:1px solid #2a3942;border-radius:10px;background:#182229;box-shadow:0 10px 35px #0009}
 .emoji-picker[hidden]{display:none}.emoji-label{font-size:11px;color:#8696a0;margin:4px 3px 6px}.emoji-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-bottom:8px}
-.emoji-grid button{border:0;border-radius:6px;background:transparent;font-size:22px;line-height:34px;cursor:pointer}.emoji-grid button:hover{background:#2a3942}
+.emoji-grid button{border:0;border-radius:6px;background:transparent;font-size:22px;line-height:34px;cursor:pointer}@media(hover:hover) and (pointer:fine){.emoji-grid button:hover{background:#2a3942}}
 @media(max-width:700px){.composer-wrap{padding:7px 8px env(safe-area-inset-bottom,7px)}.emoji-picker{left:8px;bottom:58px}.emoji-grid{grid-template-columns:repeat(7,1fr)}}
 
 /* v16.3: give chat preview text enough vertical room for descenders (g, p, y, ...). */
@@ -538,7 +538,8 @@ dialog.chat-controls::backdrop{background:#0009}
 .message-copy-actions .message-copy-error{color:#ffb4ab}
 .quick-reactions{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px}
 .quick-reactions button{display:grid;place-items:center;min-width:0;min-height:44px;padding:4px;border:0;border-radius:9px;background:transparent;color:#e9edef;font:inherit;font-size:26px;cursor:pointer}
-.quick-reactions button:hover,.quick-reactions button[aria-pressed="true"]{background:#125d4c}
+.quick-reactions button[aria-pressed="true"]{background:#125d4c}
+@media(hover:hover) and (pointer:fine){.quick-reactions button:hover{background:#125d4c}}
 .quick-reactions button:disabled{opacity:.5;cursor:wait}
 .sheet-navigation{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
 .sheet-navigation>button:first-child{flex:1}

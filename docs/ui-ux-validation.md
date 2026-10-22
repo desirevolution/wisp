@@ -351,3 +351,13 @@ checks that nothing is selected, activated or dismissed. It also checks delayed
 compatibility clicks and an immediately following intentional emoji tap. Existing
 short-tap image opening, link holding, scrolling, copy/reply and keyboard tests
 remain covered.
+
+
+The overlap regression places a message directly beneath the first emoji's future
+coordinates, opens the sheet with a real touch held at that point, and releases
+without moving. A compatibility mouse move then exercises sticky `:hover`.
+On touch-only devices an unselected emoji must remain transparent; an existing
+`aria-pressed` reaction remains highlighted. The full emoji picker has the same
+rule, while desktop mouse hover feedback remains available. Hover rules are
+restricted to `(hover:hover) and (pointer:fine)` so their appearance cannot be
+confused with a selected reaction on mobile.

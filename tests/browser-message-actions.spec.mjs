@@ -67,6 +67,11 @@ try{
  await p.evaluate(()=>{window.rejectCopy=false;navigator.clipboard.write=undefined});await more(p,'photo');await p.getByRole('button',{name:'Copy image',exact:true}).click();await p.getByRole('button',{name:'Download image',exact:true}).waitFor();await p.keyboard.press('Escape');
  await bubble(p,'in').focus();await p.keyboard.press('Shift+F10');await p.getByRole('button',{name:'Copy text',exact:true}).waitFor();await p.keyboard.press('Escape');
  if(process.env.WISP_ACTIONS_QA){await more(p,'caption');await p.screenshot({path:process.env.WISP_ACTIONS_QA+'-desktop.png'});await p.keyboard.press('Escape')}
+ // Desktop keeps pointer hover feedback in the full reaction picker.
+ await row(p,'in').hover();await row(p,'in').getByRole('button',{name:'React to message',exact:true}).click();
+ await p.locator('.emoji-grid button').first().hover();
+ assert.equal(await p.locator('.emoji-grid button').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(42, 57, 66)');
+ await p.keyboard.press('Escape');
  assert.deepEqual(desktop.errors,[]);await desktop.context.close();
  // Verify the browser's actual clipboard API as well as injected failure paths.
  const clipboardContext=await browser.newContext({viewport:{width:1200,height:850},permissions:['clipboard-read','clipboard-write'],serviceWorkers:'block'});
@@ -84,6 +89,35 @@ try{
   await m.waitForTimeout(short?80:520);await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
  };
  assert.equal(await row(m,'in').locator('.message-actions').isVisible(),false);
+ // Put the message exactly beneath the future first emoji, not merely slide a
+ // touch from elsewhere. Android may synthesize a hover at the release point.
+ await m.evaluate(()=>localStorage.removeItem('recentEmojis'));
+ await bubble(m,'in').focus();await m.keyboard.press('Shift+F10');
+ const overlapBox=await m.locator('.quick-reactions button').first().boundingBox();
+ const overlap={x:overlapBox.x+overlapBox.width/2,y:overlapBox.y+overlapBox.height/2};
+ await m.keyboard.press('Escape');
+ await bubble(m,'in').evaluate((el,point)=>{
+  const text=el.querySelector('.message-text').getBoundingClientRect();
+  el.style.transform=`translate(${point.x-text.x-12}px,${point.y-text.y-8}px)`;
+ },overlap);
+ assert.equal(await m.evaluate(point=>Boolean(document.elementFromPoint(point.x,point.y)?.closest('[data-message-id="in"]')),overlap),true);
+ await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[overlap]});
+ await m.locator('.message-sheet:popover-open').waitFor();
+ const openedBox=await m.locator('.quick-reactions button').first().boundingBox();
+ assert.ok(overlap.x>=openedBox.x&&overlap.x<=openedBox.x+openedBox.width&&overlap.y>=openedBox.y&&overlap.y<=openedBox.y+openedBox.height,'Opening touch must overlap the emoji');
+ await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await m.waitForFunction(()=>document.querySelector('.message-sheet')&&!document.querySelector('.message-sheet').inert);
+ // Compatibility mouse movement can leave :hover sticky on touch-only browsers.
+ await touch.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:overlap.x,y:overlap.y});
+ const overlapEmoji=m.locator('.quick-reactions button').first();
+ assert.equal(await overlapEmoji.getAttribute('aria-pressed'),'false');
+ assert.equal(await overlapEmoji.evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','A release-generated hover must not look like a selected reaction on mobile');
+ assert.equal(await m.evaluate(()=>window.getSelection().toString()),'');
+ // A real existing reaction retains its selection appearance on mobile.
+ await overlapEmoji.evaluate(el=>el.setAttribute('aria-pressed','true'));
+ assert.equal(await overlapEmoji.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(18, 93, 76)');
+ await m.keyboard.press('Escape');await bubble(m,'in').evaluate(el=>el.style.removeProperty('transform'));
+
  // Keep a real touch down while the sheet appears, then slide over its emoji.
  // Release must not activate, select, or dismiss newly inserted content.
  await m.evaluate(()=>{
@@ -120,7 +154,11 @@ try{
 
  await m.evaluate(()=>localStorage.removeItem('recentEmojis'));await press('in');await m.locator('.message-sheet:popover-open').waitFor();
  assert.deepEqual(await m.locator('.quick-reactions button').allTextContents(),['👍','❤️','😂','😮','😢','🙏']);assert.equal(await m.getByRole('button',{name:'Reply',exact:true}).count(),0);
- await m.getByRole('button',{name:'More emojis',exact:true}).click();assert.ok(await m.locator('.sheet-reactions wisp-emoji-picker').isVisible());await m.getByRole('button',{name:'Back to reactions',exact:true}).click();
+ await m.getByRole('button',{name:'More emojis',exact:true}).click();assert.ok(await m.locator('.sheet-reactions wisp-emoji-picker').isVisible());
+ const fullEmoji=await m.locator('.sheet-reactions .emoji-grid button').first().boundingBox();
+ await touch.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:fullEmoji.x+fullEmoji.width/2,y:fullEmoji.y+fullEmoji.height/2});
+ assert.equal(await m.locator('.sheet-reactions .emoji-grid button').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)');
+ await m.getByRole('button',{name:'Back to reactions',exact:true}).click();
  await m.getByRole('button',{name:'More message actions',exact:true}).click();await m.getByRole('button',{name:'Copy text',exact:true}).click();await m.waitForFunction(()=>!document.querySelector('.message-popover'));assert.equal(await m.evaluate(()=>window.writes.at(-1).text),rows()[0].body);
  await m.evaluate(()=>localStorage.setItem('recentEmojis',JSON.stringify(['🔥','😂','🔥'])));await press('caption');await m.locator('.message-sheet').waitFor();assert.deepEqual(await m.locator('.quick-reactions button').allTextContents(),['🔥','😂','👍','❤️','😮','😢']);
  assert.ok(await m.locator('#imageViewer').isHidden());await m.getByRole('button',{name:'More message actions',exact:true}).click();assert.ok(await m.getByRole('button',{name:'Copy image',exact:true}).isVisible());
