@@ -1,6 +1,19 @@
+import {chatMuted} from '../core/chat-state.js';
+
 // The server owns counts and monotonically increasing read positions.
 export function unreadCount(p){
   return p?.closed?0:Math.max(0,(p?.unread_sequence||0)-(p?.read_sequence||0));
+}
+
+// The title reflects the shared unread state, independent of the selected chat,
+// search filter or document visibility. Muted/closed chats stay quiet.
+export function unreadTabTitle({unread,chatStates,knownChats},now=Date.now()){
+ let total=0;
+ for(const [id,count] of unread){
+  const pref=chatStates.get(id)||knownChats.get(id);
+  if(!pref?.closed&&!chatMuted(pref,now)&&Number.isSafeInteger(count)&&count>0)total+=count;
+ }
+ return total?`(${total}) Wisp`:'Wisp';
 }
 
 export function createReadTracker({getState,canRead,apiJson,onState,onRead=()=>{}}){

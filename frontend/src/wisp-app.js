@@ -1,5 +1,5 @@
 import {loadUnreadOpening} from './services/chat-opening.js';
-import {createReadTracker,unreadCount,closeReadNotifications} from './services/unread.js';
+import {createReadTracker,unreadCount,closeReadNotifications,unreadTabTitle} from './services/unread.js';
 import './components/wisp-chat-picker.js';
 import './components/wisp-chat-controls.js';
 import {sessionOutbox} from './services/outbox.js';
@@ -419,7 +419,7 @@ function renderShell({refreshMessages=true}={}){
 
   }
 }
-function renderChatList(){navigation?.renderChatList()}
+function renderChatList(){document.title=unreadTabTitle(state);navigation?.renderChatList()}
 function renderConversationHeader(){const title=$('#conversationTitle'),btn=$('#mediaBtn');if(!title)return;const c=state.chats.find(c=>c.id===state.selectedChatId)||state.knownChats.get(state.selectedChatId);const pref=state.chatStates.get(state.selectedChatId)||c;const badge=$('#headerMuted');if(badge){badge.hidden=!chatMuted(pref);badge.title=muteLabel(pref);badge.setAttribute('aria-label',muteLabel(pref))}title.textContent=(c?displayName(c.name,c.id,c.type):'Messages')+(state.imageViewer?' · Image':'');if(btn)btn.hidden=!state.selectedChatId||Boolean(state.imageViewer)}
 async function retryMedia(messageId){
   const el=$('#messages');

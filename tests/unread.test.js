@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createReadTracker,unreadCount,closeReadNotifications} from '../frontend/src/services/unread.js';
+import {createReadTracker,unreadCount,closeReadNotifications,unreadTabTitle} from '../frontend/src/services/unread.js';
 
 test('read tracker requires a visible prepared chat and its latest incoming row',async()=>{
  const state={selectedChatId:'c',messages:[],chatStates:new Map([['c',{chat_id:'c',unread_sequence:2,read_sequence:0,last_incoming_id:'last'}]])};
@@ -35,4 +35,21 @@ test('read cleanup removes only covered message notifications, preserving tests 
  const previous=Object.getOwnPropertyDescriptor(globalThis,'navigator');
  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{serviceWorker:{getRegistration:async()=>({getNotifications:async()=>notifications})}}});
  try{await closeReadNotifications('c',new Set(['read']));assert.deepEqual(closed,[0])}finally{if(previous)Object.defineProperty(globalThis,'navigator',previous);else delete globalThis.navigator}
+});
+
+
+test('tab title sums unread messages across chats while excluding mute and closed states',()=>{
+ const now=100000;
+ const state={unread:new Map([['a',2],['b',1],['muted',8],['timed',3],['closed',4]]),chatStates:new Map([['muted',{mute_until:-1}],['timed',{mute_until:101}],['closed',{closed:true}]]),knownChats:new Map()};
+ assert.equal(unreadTabTitle(state,now),'(3) Wisp');
+ assert.equal(unreadTabTitle(state,102000),'(6) Wisp');
+ state.unread.delete('a');state.unread.delete('b');state.unread.delete('timed');
+ assert.equal(unreadTabTitle(state,now),'Wisp');
+ // Shared preferences win over a stale list snapshot; fallback covers old APIs.
+ state.knownChats.set('muted',{mute_until:0});
+ assert.equal(unreadTabTitle(state,now),'Wisp');
+ state.chatStates.set('muted',{mute_until:0});
+ assert.equal(unreadTabTitle(state,now),'(8) Wisp');
+ state.chatStates.delete('muted');state.knownChats.set('muted',{mute_until:-1});
+ assert.equal(unreadTabTitle(state,now),'Wisp');
 });

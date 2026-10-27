@@ -38,21 +38,34 @@ try{
   const context=await browser.newContext({viewport:{width,height:844},isMobile:width<700,hasTouch:width<700});context.setDefaultTimeout(10000);
   await context.addInitScript(()=>Object.defineProperty(document,'visibilityState',{get:()=>window.qaHidden?'hidden':'visible'}));
   const a=await context.newPage(),b=await context.newPage();
-  for(const page of [a,b]){page.on('pageerror',e=>errors.push(e.message));await page.goto(`http://127.0.0.1:${server.address().port}`);await page.locator('.unread-count').filter({hasText:'2'}).waitFor()}
-  await a.reload();await a.locator('.unread-count').filter({hasText:'2'}).waitFor();assert.equal(readCalls,0);
+  for(const page of [a,b]){page.on('pageerror',e=>errors.push(e.message));await page.goto(`http://127.0.0.1:${server.address().port}`);await page.locator('.unread-count').filter({hasText:'2'}).waitFor();assert.equal(await page.title(),'(2) Wisp')}
+  await a.reload();await a.locator('.unread-count').filter({hasText:'2'}).waitFor();assert.equal(readCalls,0);assert.equal(await a.title(),'(2) Wisp');
   // A delayed read acknowledges only its snapshot, while a new arrival survives.
   holdRead=true;releaseRead=null;await a.locator('#chatList [data-id="c"]').click();
   await a.waitForFunction(()=>!document.querySelector('#app').classList.contains('chat-preparing'));
   for(let i=0;i<100&&!releaseRead;i++)await new Promise(done=>setTimeout(done,10));assert.ok(releaseRead);
   await a.evaluate(()=>{window.qaHidden=true});incoming();releaseRead();releaseRead=null;
-  await b.locator('.unread-count').filter({hasText:'1'}).waitFor();assert.equal(pref.read_sequence,2);
+  await b.locator('.unread-count').filter({hasText:'1'}).waitFor();assert.equal(pref.read_sequence,2);assert.equal(await b.title(),'(1) Wisp');
   // Resume refreshes a missed message before reading it, then synchronizes device B.
   incoming({live:false});
   await a.evaluate(()=>{window.qaHidden=false;document.dispatchEvent(new Event('visibilitychange'))});
   await a.locator('.message-text').filter({hasText:'Incoming msg-4'}).waitFor();
-  await b.waitForFunction(()=>!document.querySelector('.unread-count'));assert.equal(pref.read_sequence,4);
+  await b.waitForFunction(()=>!document.querySelector('.unread-count'));assert.equal(pref.read_sequence,4);assert.equal(await b.title(),'Wisp');assert.equal(await a.title(),'Wisp');
   await b.reload();await b.locator('#chatList [data-id="c"]').waitFor();assert.equal(await b.locator('.unread-count').count(),0);
+  // A background chat updates the title, while mute keeps only the list badge.
+  await a.evaluate(()=>{window.qaHidden=true});incoming();
+  await b.waitForFunction(()=>document.title==='(1) Wisp');
+  await a.waitForFunction(()=>document.title==='(1) Wisp');
+  pref.mute_until=-1;pref.version++;emit('chat-state',{...pref});
+  await b.waitForFunction(()=>document.title==='Wisp');
+  await b.locator('.unread-count').filter({hasText:'1'}).waitFor();
+  // Expiration must refresh the title without another incoming message.
+  pref.mute_until=Math.floor(Date.now()/1000)+2;pref.version++;emit('chat-state',{...pref});
+  await b.waitForFunction(()=>document.title==='(1) Wisp');
+  pref.closed=true;pref.version++;emit('chat-state',{...pref});
+  await b.waitForFunction(()=>document.title==='Wisp');
+  await a.waitForFunction(()=>document.title==='Wisp');
   await context.close();
  }
- assert.deepEqual(errors,[]);console.log('Unread browser passed: desktop/mobile overview reload, shared device state, delayed read, background arrival and missed-event resume.');
+ assert.deepEqual(errors,[]);console.log('Unread browser passed: desktop/mobile overview reload, shared device state, delayed read, background arrival and missed-event resume, tab title counts, background updates, mute expiration and remote close.');
 }finally{releaseRead?.();await browser?.close();for(const res of streams)res.end();server.closeAllConnections();await new Promise(done=>server.close(done))}
