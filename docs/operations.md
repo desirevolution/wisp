@@ -207,3 +207,45 @@ whole-chat app-state patch; it does not send normal sender-visible read receipts
 or change WhatsApp's account-wide privacy settings. Validate the native-client
 result with the linked account; automated tests exercise Wisp and its mocked
 WhatsMeow transport rather than a real WhatsApp account.
+
+### Recovering a `regular_low` LTHash mismatch
+
+A `409 conflict` followed by `failed to verify ... mismatching LTHash` means
+WhatsMeow could not reconcile its verified app-state cache with WhatsApp. Chat
+read markers use the shared `regular_low` collection, so this blocks multiple
+chats independently of Wisp's local unread counters.
+
+When device/read-receipt synchronization is enabled, Wisp now handles this using
+the upstream [maintainer's recovery sequence](https://github.com/tulir/whatsmeow/issues/858):
+
+1. Pause outgoing chat-read jobs and fetch a full, verified `regular_low` state
+   with `FetchAppState`. Background `AppStateSyncError` events are queued onto the
+   existing worker; their event handlers do not perform network operations while
+   WhatsMeow may hold its own synchronization lock.
+2. If a full sync still fails verification (or WhatsMeow already attempted one),
+   send `BuildAppStateRecoveryRequest` to this account's own primary phone. This
+   is a protocol snapshot request, not a chat message. Keep the primary phone
+   online; opening WhatsApp on it may help it process the request.
+3. Resume queued reads after `AppStateSyncComplete` confirms a verified snapshot.
+   A delivery acknowledgment for the request alone does not resume them.
+
+Recovery calls have a 45-second timeout. Network failures retry a full fetch after
+30 seconds; failed peer requests retry after one minute. If no recovery response
+arrives, a new bounded cycle may start after five minutes. Ordinary rendering and
+multiple failing chat jobs do not generate repeated requests during the cooldown.
+Switching to **Wisp only** cancels recovery scheduling. Pending read jobs survive
+recoverable errors and retain their original read mode.
+
+Logs distinguish `recovery_queued`, `full_resync_started`, `full_resync_complete`
+(or `recovery_complete` from WhatsMeow's completion event), `peer_recovery_started`,
+`peer_recovery_requested`, `recovery_complete` and `recovery_failed`.
+`recovery_complete ... primary_snapshot=true` confirms a snapshot from the primary.
+After recovery, ordinary `event=sent` logs should resume. These logs do not prove
+that a particular native client's unread badge has already refreshed.
+
+Wisp does not disable MAC/hash verification or enable `SkipBrokenAppStatePatches`.
+It does not call `BuildFatalAppStateExceptionNotification`, which would reset
+app state and unlink devices. Wisp message history, drafts and linked-device
+credentials are not deleted by this recovery implementation. If both safe steps
+continue failing, retain the recovery logs for further diagnosis instead of
+clearing either database.

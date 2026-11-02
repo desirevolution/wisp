@@ -34,9 +34,11 @@ const (
 )
 
 type Service struct {
-	readSyncMu    sync.Mutex
-	readWake      chan struct{}
-	readTransport readSyncTransport
+	readSyncMu     sync.Mutex
+	readRecoveryMu sync.Mutex
+	readRecovery   readRecoveryState
+	readWake       chan struct{}
+	readTransport  readSyncTransport
 
 	outgoingMu             sync.Mutex
 	outgoingPending        map[string]chan struct{}
@@ -185,6 +187,7 @@ func (s *Service) LogoutAndPair(ctx context.Context) error {
 	s.readSyncMu.Lock()
 	defer s.readSyncMu.Unlock()
 	// Never carry pending reads into a newly linked WhatsApp account.
+	s.resetReadRecovery()
 	if err := s.store.CancelReadSync(); err != nil {
 		return err
 	}
@@ -227,6 +230,10 @@ func (s *Service) handle(raw any) {
 	case *events.LoggedOut:
 		x := fmt.Sprint(e.Reason)
 		s.set(model.Status{State: "error", Error: &x})
+	case *events.AppStateSyncError:
+		s.onReadAppStateError(e)
+	case *events.AppStateSyncComplete:
+		s.onReadAppStateComplete(e)
 	case *events.Receipt:
 		s.onReadReceipt(e)
 	case *events.MarkChatAsRead:

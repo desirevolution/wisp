@@ -31,7 +31,11 @@ func (s *Service) WakeReadSync() {
 func (s *Service) SetReadMode(mode string) error {
 	s.readSyncMu.Lock()
 	defer s.readSyncMu.Unlock()
-	return s.store.SetReadMode(mode)
+	err := s.store.SetReadMode(mode)
+	if err == nil && mode == store.ReadModeLocal {
+		s.resetReadRecovery()
+	}
+	return err
 }
 func (s *Service) runReadSync(ctx context.Context) {
 	ticker := time.NewTicker(15 * time.Second)
@@ -43,10 +47,15 @@ func (s *Service) runReadSync(ctx context.Context) {
 		case <-s.readWake:
 		case <-ticker.C:
 		}
-		s.flushReadSync(ctx)
+		if s.processReadRecovery(ctx) {
+			s.flushReadSync(ctx)
+		}
 	}
 }
 func (s *Service) flushReadSync(ctx context.Context) {
+	if s.readRecoveryPending() {
+		return
+	}
 	transport := s.readTransport
 	if transport == nil {
 		if s.client == nil || !s.client.IsConnected() {
@@ -64,13 +73,17 @@ func (s *Service) flushReadSync(ctx context.Context) {
 		if failedChats[job.Chat] {
 			continue
 		}
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || s.readRecoveryPending() {
 			return
 		}
 		sent, sendErr := s.sendQueuedRead(ctx, transport, job)
 		err = sendErr
 		if err != nil {
 			log.Printf("[read-sync] event=send_failed job=%d mode=%s error=%q", job.ID, job.Mode, err)
+			if isReadAppStateHashError(err) {
+				s.queueReadRecovery(err, false)
+				return // regular_low is shared by all chats; stop the failure storm.
+			}
 			// Keep per-chat order on retries, while other chats can make progress.
 			failedChats[job.Chat] = true
 			continue
@@ -167,6 +180,7 @@ func (s *Service) sendReadSync(ctx context.Context, transport readSyncTransport,
 		if err := transport.SendAppState(ctx, appstate.BuildMarkChatAsRead(chat, true, time.Unix(m.Timestamp, 0), key)); err != nil {
 			return fmt.Errorf("synchronize chat read boundary: %w", err)
 		}
+		s.noteReadStateSuccess()
 	}
 	now := time.Now()
 	for _, key := range order {
