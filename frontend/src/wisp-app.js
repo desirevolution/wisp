@@ -72,7 +72,8 @@ let imageScrollIntent=null;
 function showToast(message,kind='error'){let el=$('#appToast');if(!el){el=document.createElement('div');el.id='appToast';app.appendChild(el)}el.className=`app-toast ${kind}`;el.textContent=message;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{el.hidden=true},4500)}
 let navigation,conversation,gallery,pwa,viewHistory;
 const readTracker=createReadTracker({getState:()=>state,apiJson,onState:applyChatState,onRead:closeReadNotifications,
- canRead:()=>state.connection.state==='connected'&&document.visibilityState==='visible'&&Boolean(state.selectedChatId)&&state.view==='chat'&&!state.chatPreparing&&!state.messageLoading&&!state.chatLoadError&&!state.imageViewer&&!state.settingsOpen&&!state.chatPickerOpen&&app.classList.contains('open')&&!app.classList.contains('initial-setup-mode')&&[...app.querySelectorAll('#messages [data-message-id]')].some(el=>el.dataset.messageId===state.chatStates.get(state.selectedChatId)?.last_incoming_id)
+ canRead:()=>state.connection.state==='connected'&&document.visibilityState==='visible'&&Boolean(state.selectedChatId)&&state.view==='chat'&&!state.chatPreparing&&!state.messageLoading&&!state.chatLoadError&&!state.imageViewer&&!state.settingsOpen&&!state.chatPickerOpen&&app.classList.contains('open')&&!app.classList.contains('initial-setup-mode'),
+ isRendered:id=>[...app.querySelectorAll('#messages [data-message-id]')].some(el=>el.dataset.messageId===id)
 });
 const markVisibleChatRead=()=>void readTracker.markVisible();
 
@@ -212,7 +213,7 @@ async function failChatPreparation(token,error){
   state.messageLoading=false;state.chatLoadError=error.message||'Could not load messages.';
   renderShell({refreshMessages:false});
 }
-async function selectChat(id,{restore=false}={}){if(state.imageViewer)dismissImageViewer();viewHistory?.openChat(id,{preserveImage:restore});imageScrollIntent=null;
+async function selectChat(id,{restore=false}={}){readTracker.reset(id);if(state.imageViewer)dismissImageViewer();viewHistory?.openChat(id,{preserveImage:restore});imageScrollIntent=null;
   if(id===state.selectedChatId&&state.view==='chat'){
     if(state.chatPreparing&&!state.chatLoadError)return;
     if(!state.chatPreparing&&!unreadCount(state.chatStates.get(id))){app.classList.add('open');markVisibleChatRead();renderChatList();renderConversationHeader();focusComposer();return}

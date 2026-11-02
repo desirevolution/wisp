@@ -106,3 +106,30 @@ func TestReadModeAPIValidationAndQueuedRead(t *testing.T) {
 		t.Fatal(jobs)
 	}
 }
+
+func TestReadEndpointAcceptsVisibleOwnBoundaryWithoutUnread(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	bus := events.New()
+	wa := whatsapp.New(st, bus, whatsapp.Options{})
+	handler := New(st, wa, bus, nil, nil, nil, "").Handler()
+	st.SetReadMode(store.ReadModeSelf)
+	st.Save(model.Message{ID: "mine", WhatsAppID: "mine", ChatID: "123@s.whatsapp.net", Type: "chat", FromMe: 1, Timestamp: 10}, "C", "private")
+	request := func(body string, code int) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest("POST", "/api/chats/123@s.whatsapp.net/read", strings.NewReader(body)))
+		if rec.Code != code {
+			t.Fatal(rec.Code, rec.Body.String())
+		}
+	}
+	request(`{"through_sequence":0,"last_message_id":"missing"}`, 400)
+	request(`{"through_sequence":0,"last_message_id":"mine"}`, 200)
+	jobs, err := st.ReadSyncJobs()
+	if err != nil || len(jobs) != 1 || len(jobs[0].Messages) != 1 || !jobs[0].Messages[0].FromMe {
+		t.Fatal(jobs, err)
+	}
+}

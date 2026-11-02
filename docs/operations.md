@@ -178,3 +178,32 @@ MQTT's per-client in-memory protocol store keeps encoded packet snapshots. Each
 reconnect reader receives a separate packet, avoiding Paho's shared-pointer race
 between setting the retransmit DUP flag and writing a packet. This remains an
 in-memory store, not a persistent replay queue.
+
+
+## WhatsApp read synchronization diagnostics
+
+If a native WhatsApp client still shows a chat as unread with **Sync my devices**,
+update Wisp and reopen that chat in the visible app. Earlier versions skipped
+native synchronization when Wisp's own unread count was already zero, for imported
+history and for own-only chats. The read request now carries the latest confirmed
+loaded message ID, preserving whether that boundary was sent by you. Deleted
+message stubs can bound the chat update but do not receive sender read receipts.
+
+Container logs containing `[read-sync]` distinguish the steps:
+
+- `event=read_acknowledged mode=devices ... explicit_boundary=true`: Wisp accepted
+  the foreground chat's read snapshot, even when `through=0`.
+- `event=sent`: the queued WhatsMeow operations completed. This is not a receipt
+  proving that a particular native client has updated its badge.
+- `event=send_failed`: the error identifies either the chat-read boundary patch
+  or the read receipt. The job remains queued and is retried after reconnection
+  or on the periodic worker tick.
+
+Requests for an unchanged boundary are suppressed during ordinary rendering.
+Explicitly reopening a chat can retry a completed boundary, without requiring a
+new incoming message. Updating the setting alone does not read background chats.
+The `devices` mode sends only `read-self` receipts for incoming messages and a
+whole-chat app-state patch; it does not send normal sender-visible read receipts
+or change WhatsApp's account-wide privacy settings. Validate the native-client
+result with the linked account; automated tests exercise Wisp and its mocked
+WhatsMeow transport rather than a real WhatsApp account.

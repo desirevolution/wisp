@@ -158,15 +158,21 @@ func (s *Store) OpenChat(chat, name, kind string) error {
 // MarkChatRead acknowledges only a previously observed sequence. Older requests
 // cannot clear newer arrivals or move a shared read position backwards.
 func (s *Store) MarkChatRead(chat string, through int64) (ChatState, error) {
-	return s.markChatRead(chat, through, false)
+	return s.markChatRead(chat, through, false, "")
 }
 
 // MarkChatReadAndSync atomically acknowledges Wisp messages and queues only the
 // newly acknowledged range. Repeated requests and remote echoes never send again.
 func (s *Store) MarkChatReadAndSync(chat string, through int64) (ChatState, error) {
-	return s.markChatRead(chat, through, true)
+	return s.markChatRead(chat, through, true, "")
 }
-func (s *Store) markChatRead(chat string, through int64, syncRead bool) (ChatState, error) {
+
+// MarkChatReadThrough also synchronizes an explicitly displayed timeline boundary,
+// including own messages and chats whose Wisp-only unread count is already zero.
+func (s *Store) MarkChatReadThrough(chat string, through int64, lastID string) (ChatState, error) {
+	return s.markChatRead(chat, through, true, lastID)
+}
+func (s *Store) markChatRead(chat string, through int64, syncRead bool, lastID string) (ChatState, error) {
 	chat = s.ResolveChat(chat)
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -184,12 +190,12 @@ func (s *Store) markChatRead(chat string, through int64, syncRead bool) (ChatSta
 	if through < 0 || through > p.UnreadSequence {
 		return p, ErrInvalidReadSequence
 	}
-	if through > p.ReadSequence {
-		if syncRead {
-			if err = queueReadSync(tx, chat, p.ReadSequence, through); err != nil {
-				return p, err
-			}
+	if syncRead && (through > p.ReadSequence || lastID != "") {
+		if err = queueReadSync(tx, chat, p.ReadSequence, through, lastID); err != nil {
+			return p, err
 		}
+	}
+	if through > p.ReadSequence {
 		p.ReadSequence = through
 		if _, err = tx.Exec(`DELETE FROM unread_messages WHERE chat_id=? AND sequence<=?`, chat, through); err != nil {
 			return p, err

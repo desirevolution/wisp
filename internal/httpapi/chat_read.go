@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"wisp/internal/events"
 	"wisp/internal/store"
@@ -18,6 +19,7 @@ func (s *Server) markChatRead(w http.ResponseWriter, r *http.Request, id string)
 	}
 	var in struct {
 		Through *int64 `json:"through_sequence"`
+		LastID  string `json:"last_message_id"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
 	dec.DisallowUnknownFields()
@@ -25,10 +27,10 @@ func (s *Server) markChatRead(w http.ResponseWriter, r *http.Request, id string)
 		jsonOut(w, 400, map[string]string{"error": "Invalid read sequence"})
 		return
 	}
-	p, err := s.st.MarkChatReadAndSync(id, *in.Through)
+	p, err := s.st.MarkChatReadThrough(id, *in.Through, in.LastID)
 	if err != nil {
 		code := 500
-		if errors.Is(err, store.ErrInvalidReadSequence) {
+		if errors.Is(err, store.ErrInvalidReadSequence) || errors.Is(err, store.ErrInvalidReadBoundary) {
 			code = 400
 		}
 		if errors.Is(err, sql.ErrNoRows) {
@@ -38,6 +40,9 @@ func (s *Server) markChatRead(w http.ResponseWriter, r *http.Request, id string)
 		return
 	}
 	s.bus.Publish(events.Event{Type: "unread", Data: p})
+	if mode := s.st.ReadMode(); mode != store.ReadModeLocal {
+		log.Printf("[read-sync] event=read_acknowledged mode=%s through=%d explicit_boundary=%t", mode, *in.Through, in.LastID != "")
+	}
 	s.wa.WakeReadSync()
 	jsonOut(w, 200, p)
 }

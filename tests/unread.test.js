@@ -53,3 +53,26 @@ test('tab title sums unread messages across chats while excluding mute and close
  state.chatStates.delete('muted');state.knownChats.set('muted',{mute_until:-1});
  assert.equal(unreadTabTitle(state,now),'Wisp');
 });
+
+
+test('device sync acknowledges loaded own/history boundaries even with no local unread count',async()=>{
+ const state={selectedChatId:'c',readMode:'devices',messages:[{id:'history',timestamp:1},{id:'mine',timestamp:2,from_me:1}],chatStates:new Map(),chats:[{id:'c',last_message_id:'mine'}]};
+ let visible=false,rendered=false,calls=[];
+ const tracker=createReadTracker({getState:()=>state,canRead:()=>visible,isRendered:()=>rendered,onState:p=>state.chatStates.set('c',p),apiJson:async(url,options)=>{calls.push(JSON.parse(options.body));return {chat_id:'c',unread_sequence:0,read_sequence:0,version:0}}});
+ await tracker.markVisible();visible=true;await tracker.markVisible();assert.equal(calls.length,0);
+ rendered=true;await tracker.markVisible();assert.deepEqual(calls,[{through_sequence:0,last_message_id:'mine'}]);
+ await tracker.markVisible();assert.equal(calls.length,1,'no request loop on already-read state');
+ state.messages.push({id:'new-own',timestamp:3,from_me:1});state.chats[0].last_message_id='new-own';
+ await tracker.markVisible();assert.equal(calls.length,2);assert.equal(calls[1].last_message_id,'new-own');
+ tracker.reset('c');await tracker.markVisible();assert.equal(calls.length,3,'explicit reopening repairs native unread state');
+ state.readMode='wisp';await tracker.markVisible();assert.equal(calls.length,3);
+});
+test('device sync excludes unloaded latest rows and retries failed zero-unread synchronization',async()=>{
+ const state={selectedChatId:'c',readMode:'devices',messages:[{id:'old',timestamp:1}],chatStates:new Map(),chats:[{id:'c',last_message_id:'latest'}]};
+ let calls=0;
+ const tracker=createReadTracker({getState:()=>state,canRead:()=>true,onState:p=>state.chatStates.set('c',p),apiJson:async()=>{calls++;if(calls===1)throw Error('offline');return {chat_id:'c',unread_sequence:0,read_sequence:0,version:0}}});
+ await tracker.markVisible();assert.equal(calls,0);
+ state.messages.push({id:'latest',timestamp:2});await tracker.markVisible();assert.equal(calls,1);
+ await tracker.markVisible();assert.equal(calls,2);
+ await tracker.markVisible();assert.equal(calls,2);
+});

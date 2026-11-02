@@ -202,9 +202,17 @@ not that the recipient received or read it. See [outbox.md](outbox.md).
 `GET /api/config` includes `readMode`: `wisp` (default), `devices`, or `receipts`.
 `POST /api/config` accepts the same enum; invalid values return 400. The setting
 is shared by all Wisp clients; a `config` SSE event refreshes connected settings.
-`POST /api/chats/:id/read` retains its existing `through_sequence` contract and
-returns Wisp state immediately. In sync modes it atomically queues only newly
-acknowledged indexed messages, without waiting for the WhatsApp network. A 200
+`POST /api/chats/:id/read` accepts `through_sequence` plus optional
+`last_message_id`, the latest confirmed loaded timeline boundary. The ID must
+belong to the chat and cannot reference a newer unread sequence than the supplied
+snapshot; invalid boundaries return 400 without changing read state. The boundary
+may be your own message. With an explicit boundary, device sync is queued even
+when the Wisp unread count is already zero or history has no unread index. Without
+a boundary the legacy sequence-only behavior remains supported. New incoming
+receipts use the observed unread range and the most recent known incoming message
+at or before the boundary; whole-chat app-state uses the exact boundary and its
+actual sender/FromMe metadata. Outgoing messages never get sender read receipts.
+The endpoint returns Wisp state immediately, without waiting for WhatsApp. A 200
 response acknowledges Wisp state, not successful WhatsApp delivery. Failed jobs
 are persisted for retry; changing modes cancels pending jobs from the old mode.
 Incoming own-device reads publish `unread` events and never queue receipts again.

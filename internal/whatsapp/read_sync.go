@@ -59,7 +59,11 @@ func (s *Service) flushReadSync(ctx context.Context) {
 		log.Printf("[read-sync] event=load_failed error=%q", err)
 		return
 	}
+	failedChats := make(map[string]bool)
 	for _, job := range jobs {
+		if failedChats[job.Chat] {
+			continue
+		}
 		if ctx.Err() != nil {
 			return
 		}
@@ -67,7 +71,8 @@ func (s *Service) flushReadSync(ctx context.Context) {
 		err = sendErr
 		if err != nil {
 			log.Printf("[read-sync] event=send_failed job=%d mode=%s error=%q", job.ID, job.Mode, err)
-			// Retry next tick, but allow other chats to make progress.
+			// Keep per-chat order on retries, while other chats can make progress.
+			failedChats[job.Chat] = true
 			continue
 		}
 		if err = s.store.DeleteReadSyncJob(job.ID); err != nil {
@@ -104,20 +109,31 @@ func (s *Service) sendReadSync(ctx context.Context, transport readSyncTransport,
 	if job.Mode == store.ReadModeReceipts {
 		receiptType = types.ReceiptTypeRead
 	}
-	// Batch by original chat and sender, required for group read receipts.
+	// Receipts are for incoming messages only. A whole-chat app-state boundary
+	// may be an own message, and must retain FromMe and its original address.
 	type group struct {
 		chat, sender types.JID
 		ids          []types.MessageID
-		last         store.ReadSyncMessage
 	}
 	groups := map[string]*group{}
 	order := []string{}
+	latest := map[string]store.ReadSyncMessage{}
+	boundaries := []store.ReadSyncMessage{}
 	for _, m := range job.Messages {
 		chat, err := types.ParseJID(m.Chat)
 		if err != nil {
 			return err
 		}
 		if chat.Server != types.DefaultUserServer && chat.Server != types.HiddenUserServer && chat.Server != types.GroupServer {
+			continue
+		}
+		if m.Boundary {
+			boundaries = append(boundaries, m)
+		}
+		if previous, ok := latest[m.Chat]; !ok || m.Timestamp >= previous.Timestamp {
+			latest[m.Chat] = m
+		}
+		if m.FromMe || m.SkipReceipt {
 			continue
 		}
 		sender, err := types.ParseJID(m.Sender)
@@ -135,37 +151,35 @@ func (s *Service) sendReadSync(ctx context.Context, transport readSyncTransport,
 			order = append(order, key)
 		}
 		g.ids = append(g.ids, m.ID)
-		if g.last.ID == "" || m.Timestamp >= g.last.Timestamp {
-			g.last = m
+	}
+	if len(boundaries) == 0 {
+		for _, m := range latest {
+			boundaries = append(boundaries, m)
+		}
+	}
+	// Do the own-device chat update first, independently of sender receipts.
+	for _, m := range boundaries {
+		chat, _ := types.ParseJID(m.Chat)
+		key := &waCommon.MessageKey{RemoteJID: proto.String(m.Chat), FromMe: proto.Bool(m.FromMe), ID: proto.String(m.ID)}
+		if chat.Server == types.GroupServer {
+			key.Participant = proto.String(m.Sender)
+		}
+		if err := transport.SendAppState(ctx, appstate.BuildMarkChatAsRead(chat, true, time.Unix(m.Timestamp, 0), key)); err != nil {
+			return fmt.Errorf("synchronize chat read boundary: %w", err)
 		}
 	}
 	now := time.Now()
 	for _, key := range order {
 		g := groups[key]
-		// WhatsMeow honors the account's receipt privacy setting in normal mode.
-		if err := transport.MarkRead(ctx, g.ids, now, g.chat, g.sender, receiptType); err != nil {
-			return err
+		for offset := 0; offset < len(g.ids); offset += 100 {
+			end := min(offset+100, len(g.ids))
+			// Normal mode still honors the account's receipt privacy setting.
+			if err := transport.MarkRead(ctx, g.ids[offset:end], now, g.chat, g.sender, receiptType); err != nil {
+				return fmt.Errorf("send %s receipt: %w", receiptType, err)
+			}
 		}
 	}
-	// One whole-chat app-state boundary per address. No later message, including
-	// one arriving during a retry, can enter this persisted snapshot.
-	latest := map[string]store.ReadSyncMessage{}
-	for _, key := range order {
-		m := groups[key].last
-		if previous, ok := latest[m.Chat]; !ok || m.Timestamp >= previous.Timestamp {
-			latest[m.Chat] = m
-		}
-	}
-	for address, m := range latest {
-		chat, _ := types.ParseJID(address)
-		key := &waCommon.MessageKey{RemoteJID: proto.String(address), FromMe: proto.Bool(false), ID: proto.String(m.ID)}
-		if chat.Server == types.GroupServer {
-			key.Participant = proto.String(m.Sender)
-		}
-		if err := transport.SendAppState(ctx, appstate.BuildMarkChatAsRead(chat, true, time.Unix(m.Timestamp, 0), key)); err != nil {
-			return err
-		}
-	}
+
 	return nil
 }
 func (s *Service) publishRemoteRead(chat string, ids []string, before, readAt int64) {
@@ -200,8 +214,9 @@ func (s *Service) onChatRead(e *events.MarkChatAsRead) {
 	}
 	ids := []string{}
 	for _, m := range messageRange.GetMessages() {
-		// An outgoing boundary key must not be mistaken for an incoming message.
-		if key := m.GetKey(); key != nil && !key.GetFromMe() && key.GetID() != "" {
+		// A known own key is also a valid whole-chat boundary. The store
+		// resolves its preceding incoming messages without treating it as one.
+		if key := m.GetKey(); key != nil && key.GetID() != "" {
 			ids = append(ids, key.GetID())
 		}
 	}
