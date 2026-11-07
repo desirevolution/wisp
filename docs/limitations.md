@@ -15,11 +15,19 @@ versions. Creating edits in Wisp is not supported. Deletions are marked visibly;
 previously stored originals, quotes and cached media may remain available and
 can be revealed. Wisp is therefore not a mirror of WhatsApp's deletion retention.
 
+Shared locations are shown with a link to a fixed point on the map. A WhatsApp live
+location shows the first point Wisp received as a static snapshot. Wisp does
+not subscribe to later position updates. Opening the map link sends the
+coordinates to OpenStreetMap.
+
 ## Push notifications
 
 Push is opt-in per browser/device, needs HTTPS and notification permission, and
 is affected by OS/browser policies and network availability. Subscription refresh
 runs when the app resumes. Check the permission and reopen Wisp after upgrades.
+Push endpoints must use public HTTPS on port 443. Wisp connects directly,
+blocks non-public addresses and does not follow redirects. A location push
+contains a generic label without coordinates or an address.
 
 Every registered device is targeted for a new incoming message unless that chat
 is muted in Wisp. Muting also stops pending server-side retries. A notification
@@ -48,7 +56,8 @@ monitor disk usage and back up the cache together with the databases.
 Sending supports text, replies, the composer emoji subset and one PNG/JPEG image
 up to 10 MiB / 20 megapixels. No arbitrary attachments, GIF/WebP/HEIC uploads,
 image-URL downloads or original-quality/document image mode are provided.
-Text/image/reply drafts are per-chat browser-memory state and disappear on reload.
+Text and reply drafts are stored in the browser. Unsent image drafts are held
+in memory and are discarded on reload.
 After an ambiguous network timeout, verify the chat before manually retrying a
 send: provider acceptance can precede an HTTP response failure.
 

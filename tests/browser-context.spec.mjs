@@ -171,9 +171,12 @@ try{
  assert.ok(Math.abs(await page.locator('#messages').evaluate(el=>el.scrollTop)-readingTop)<2,JSON.stringify({readingTop,current:await page.locator('#messages').evaluate(el=>el.scrollTop)}));
  assert.ok((await page.locator('#newMessages').textContent()).includes('new message'));
  await page.evaluate(()=>window.testEvents.dispatchEvent(new MessageEvent('connection',{data:JSON.stringify({state:'disconnected'})})));
- await page.locator('#connectionView').waitFor();assert.equal(await page.locator('#composer').isVisible(),false);
+ await page.locator('.conversation-title').getByText('WhatsApp disconnected').waitFor();
+ assert.equal(await page.locator('#messages').isVisible(),true);
+ assert.equal(await page.locator('#composer').isVisible(),false);
+ assert.ok(Math.abs(await page.locator('#messages').evaluate(el=>el.scrollTop)-readingTop)<2);
  await page.evaluate(()=>window.testEvents.dispatchEvent(new MessageEvent('connection',{data:JSON.stringify({state:'connected'})})));
- await page.locator('#messages').waitFor();
+ await page.locator('#composer').waitFor();
  assert.ok(Math.abs(await page.locator('#messages').evaluate(el=>el.scrollTop)-readingTop)<2,JSON.stringify({readingTop,current:await page.locator('#messages').evaluate(el=>el.scrollTop)}));
  assert.equal(await page.locator('#composerInput').inputValue(),'Stable draft');
  await page.locator('#composerInput').fill('one\ntwo\nthree\nfour\nfive\nsix\nseven');
@@ -615,8 +618,15 @@ try{
   for(const fromMe of [0,1])for(const [w,h] of [[600,1200],[200,800],[64,64],[1600,900]]){
    await p.evaluate(async({fromMe,w,h})=>{
     const list=document.querySelector('#caption-layout-check');list.chatId=`caption-${fromMe}-${w}x${h}`;list.messages=[{id:'caption-image',chat_id:'caption',type:'image',has_media:1,media_id:`caption-${w}x${h}`,media_status:'ready',media_width:w,media_height:h,from_me:fromMe,sender_name:'Bea',timestamp:1790760000,body:'A caption with multiple words and a long link: https://example.com/'+('longpath'.repeat(35)),reactions:[]}];await list.updateComplete;
-    await list.querySelector('img').decode();await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
    },{fromMe,w,h});
+   // A reused lazy image can still be switching requests after Lit's update.
+   await p.waitForFunction(src=>{
+    const image=document.querySelector('#caption-layout-check .inline-image');
+    return image?.currentSrc===new URL(src,location.href).href&&image.complete&&image.naturalWidth>0;
+   },`/api/media/caption-${w}x${h}`);
+   await p.locator('#caption-layout-check .inline-image').evaluate(async image=>{
+    await image.decode();await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
+   });
    const bounds=await p.evaluate(()=>{
     const bubble=document.querySelector('#caption-layout-check .bubble'),frame=bubble.querySelector('.media-frame'),body=bubble.querySelector('.body');
     const rect=el=>{const r=el.getBoundingClientRect();return {x:r.x,width:r.width,right:r.right}};

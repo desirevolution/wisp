@@ -28,6 +28,9 @@ export function createViewHistory({ win = window, onChange }) {
       if(previous.view==='overview')win.history.pushState(next,'');
       else win.history.replaceState(next,'');
     },
+    openSearchHit(chatId,messageId){
+      win.history.pushState({wispView:marker,view:'chat',chatId,searchMessage:messageId},'');
+    },
     openGallery(chatId,kind='media'){
       const next={wispView:marker,view:'gallery',chatId,kind};
       if(current().view==='gallery')win.history.replaceState(next,'');

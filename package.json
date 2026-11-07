@@ -17,8 +17,8 @@
   },
   "devDependencies": {
     "happy-dom": "21.0.4",
-    "playwright": "1.64.1",
-    "vite": "8.3.5"
+    "playwright": "1.65.0",
+    "vite": "8.3.6"
   },
   "description": "A lightweight self-hosted WhatsApp companion"
 }

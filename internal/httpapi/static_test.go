@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -28,5 +29,17 @@ func TestEmbeddedAssetsAndSPAFallbackDoNotRedirect(t *testing.T) {
 				t.Fatal("request URL was changed", req.URL.Path)
 			}
 		})
+	}
+}
+
+func TestMissingBuildAssetDoesNotServeSPAFallback(t *testing.T) {
+	server := &Server{assets: fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte("<!doctype html><title>Wisp</title>")},
+	}}
+	req := httptest.NewRequest("GET", "/assets/missing.js", nil)
+	rec := httptest.NewRecorder()
+	server.static(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatal(rec.Code, rec.Body.String())
 	}
 }

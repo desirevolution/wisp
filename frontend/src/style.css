@@ -447,7 +447,7 @@ wisp-message-list.messages{container-type:inline-size}
 .quote-thumbnail[hidden]{display:none}
 
 /* Chat visibility and notification controls. */
-wisp-chat-controls{display:contents}
+wisp-chat-controls,wisp-chat-search{display:contents}
 dialog.chat-controls{width:min(480px,calc(100% - 24px));max-height:min(720px,calc(100dvh - 32px));margin:auto;padding:0;border:1px solid var(--border,#2a3942);border-radius:12px;background:#182229;color:#e9edef;box-shadow:0 18px 60px #0008;overflow:hidden}
 dialog.chat-controls::backdrop{background:#0009}
 .chat-controls header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #2a3942}
@@ -600,3 +600,21 @@ dialog.chat-controls::backdrop{background:#0009}
 
 /* Long-press release must not select the text/emoji that appears beneath it. */
 .message-sheet,.message-sheet *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+
+
+.app-update-notice button{margin:3px 0 3px 8px;padding:4px 8px;border:1px solid #40535e;border-radius:5px;background:#182229;color:#e9edef;cursor:pointer}
+.app-update-notice button:first-of-type{background:#00a884;color:#071b16}
+.app-update-notice button:disabled{opacity:.65;cursor:wait}
+
+.conversation-title{min-width:0;flex:1}
+.conversation-title small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e9c489}
+.message-location{display:grid;gap:5px;padding-right:18px}
+.message-location small{color:#c0cdd2;max-width:30ch}
+.message-location a{color:#9cebd8;width:fit-content}
+.chat-search-dialog{width:min(32rem,calc(100vw - 24px));max-height:80dvh;padding:16px;background:#182229;color:#e9edef;border:1px solid #48626d;border-radius:12px}
+.chat-search-dialog::backdrop{background:#0009}
+.chat-search-dialog header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+.chat-search-dialog h2{margin:0;font-size:1.1rem}
+.chat-search-dialog input{width:100%;padding:10px;background:#111b21;color:inherit;border:1px solid #48626d;border-radius:7px}
+.chat-search-dialog header button,.chat-search-results p button{padding:7px 10px;background:#26343c;color:inherit;border:1px solid #48626d;border-radius:7px;cursor:pointer}
+.chat-search-results{margin-top:10px;max-height:55dvh;overflow:auto;overflow-wrap:anywhere}

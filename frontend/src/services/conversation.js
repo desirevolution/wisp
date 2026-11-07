@@ -68,7 +68,7 @@ export function createConversation({ app, store, apiJson, onRetryMedia, onReply,
     if (!el) return null;
     el.chatId=state.selectedChatId;
     el.messages = sessionOutbox.merge(state.selectedChatId,state.messages);
-    el.sendEnabled = state.sendEnabled && !state.mirrorOnly;
+    el.sendEnabled = state.sendEnabled && !state.mirrorOnly && state.connection.state === 'connected';
     el.pendingReactions = state.pendingReactions;
     el.hasOlder = state.hasOlder;
     el.loading = loading;

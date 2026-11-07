@@ -35,6 +35,10 @@ func messageContext(message *waE2E.Message) *waE2E.ContextInfo {
 		c = m.GetDocumentMessage().GetContextInfo()
 	case m.GetStickerMessage() != nil:
 		c = m.GetStickerMessage().GetContextInfo()
+	case m.GetLocationMessage() != nil:
+		c = m.GetLocationMessage().GetContextInfo()
+	case m.GetLiveLocationMessage() != nil:
+		c = m.GetLiveLocationMessage().GetContextInfo()
 	}
 	return c
 }

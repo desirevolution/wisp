@@ -357,8 +357,8 @@ func (s *Service) onMessage(e *events.Message) {
 	originalChat := i.Chat
 	chat := s.canonicalJID(ctx, originalChat)
 	senderJID := s.canonicalJID(ctx, i.Sender)
-	kind, body, media := summary(e.Message)
-	if !isVisibleMessage(kind, body, media) {
+	var m model.Message
+	if !normalizeContent(&m, e.Message) {
 		return
 	}
 	sid := senderJID.String()
@@ -371,7 +371,9 @@ func (s *Service) onMessage(e *events.Message) {
 	if sn != "" {
 		senderName = &sn
 	}
-	m := model.Message{MentionJIDs: messageMentionJIDs(e.Message), ID: i.ID, WhatsAppID: i.ID, ChatID: chat.String(), SenderID: sender, SenderName: senderName, Type: kind, Body: body, HasMedia: media, Timestamp: i.Timestamp.Unix()}
+	m.ID, m.WhatsAppID, m.ChatID = i.ID, i.ID, chat.String()
+	m.SenderID, m.SenderName, m.Timestamp = sender, senderName, i.Timestamp.Unix()
+	m.MentionJIDs = messageMentionJIDs(e.Message)
 	if i.IsFromMe {
 		m.FromMe = 1
 	}
@@ -408,7 +410,7 @@ func (s *Service) onMessage(e *events.Message) {
 		return
 	}
 	var mediaDownload whatsmeow.DownloadableMessage
-	if media != 0 {
+	if m.HasMedia != 0 {
 		if raw, err := proto.Marshal(e.Message); err == nil {
 			_ = s.store.SaveMediaPayload(m.ID, raw)
 		}
@@ -693,21 +695,18 @@ func (s *Service) normalizeHistoryMessage(ctx context.Context, w *waWeb.WebMessa
 	}
 
 	content, wrapper := unwrapContent(w.GetMessage())
-	kind, body, media := summary(content)
-	if !isVisibleMessage(kind, body, media) {
-		return nil, fmt.Sprintf("non_visible:%s:%s", wrapper, kind)
+	var m model.Message
+	if !normalizeContent(&m, content) {
+		return nil, fmt.Sprintf("non_visible:%s:%s", wrapper, m.Type)
 	}
 	ts := int64(w.GetMessageTimestamp())
 	if ts == 0 {
 		return nil, "missing_timestamp"
 	}
 
-	m := model.Message{
-		MentionJIDs: messageMentionJIDs(content),
-		ID:          id, WhatsAppID: id, ChatID: canonical,
-		SenderID: sender, SenderName: senderName,
-		Type: kind, Body: body, HasMedia: media, Timestamp: ts,
-	}
+	m.ID, m.WhatsAppID, m.ChatID = id, id, canonical
+	m.SenderID, m.SenderName, m.Timestamp = sender, senderName, ts
+	m.MentionJIDs = messageMentionJIDs(content)
 	if key.GetFromMe() {
 		m.FromMe = 1
 	}
@@ -715,7 +714,7 @@ func (s *Service) normalizeHistoryMessage(ctx context.Context, w *waWeb.WebMessa
 		return nil, "invalid_payload"
 	}
 	m.HistoryRaw, _ = proto.Marshal(w)
-	return &normalizedHistoryMessage{Message: m, Raw: w.GetMessage(), Kind: kind, Wrapper: wrapper}, ""
+	return &normalizedHistoryMessage{Message: m, Raw: w.GetMessage(), Kind: m.Type, Wrapper: wrapper}, ""
 }
 
 func (s *Service) importConversation(conv *waHistorySync.Conversation, onDemand bool) int {

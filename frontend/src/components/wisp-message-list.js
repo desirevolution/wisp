@@ -230,6 +230,24 @@ export class WispMessageList extends LitElement {
         ${history.map(v=>html`<div class="edit-version"><small>${v.original?'First stored version':'Edited'} · ${new Date(v.timestamp_ms).toLocaleString()}</small><div class="version-body">${v.body||mediaLabel(v.type)}</div></div>`)}
         <small>Only versions received by Wisp are available.</small></div>`:null}</div>`;
   }
+  location(m) {
+    const point = m.location;
+    const live = m.type === 'live_location';
+    const valid = Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude) &&
+      Math.abs(point.latitude) <= 90 && Math.abs(point.longitude) <= 180;
+    const map = valid ? new URL('https://www.openstreetmap.org/') : null;
+    if (map) {
+      map.search = new URLSearchParams({ mlat: point.latitude, mlon: point.longitude });
+      map.hash = `map=17/${point.latitude}/${point.longitude}`;
+    }
+    return html`<div class="message-location">
+      <b>${live ? 'Live location · Snapshot' : 'Location shared'}</b>
+      ${point?.name ? html`<span>${point.name}</span>` : null}
+      ${point?.address ? html`<span>${point.address}</span>` : null}
+      ${live ? html`<small>Wisp shows the first location it received. This position does not update.</small>` : null}
+      ${map ? html`<a href=${map.href} target="_blank" rel="noopener noreferrer">Open map</a>` : html`<small>Coordinates unavailable.</small>`}
+    </div>`;
+  }
   timestamp(m,inline=false){
     const date=new Date(m.timestamp*1000),valid=Number.isFinite(date.getTime());
     return html`<time class=${inline?'time inline-time':'time'} datetime=${valid?date.toISOString():''} title=${valid?date.toLocaleString():''}>${valid?fmt(m.timestamp):''}</time>`;
@@ -248,7 +266,8 @@ export class WispMessageList extends LitElement {
       ${repeat(this.messages,m=>m.id,(m,index)=>{
         const key=dayKey(m.timestamp),showDay=key!==lastDay;lastDay=key;
         const grouped=sameMessageGroup(this.messages[index-1],m);
-        const inlineTime=Boolean(m.body)&&(!m.deleted||this.expanded.has(m.id));
+        const isLocation=m.type==='location'||m.type==='live_location';
+        const inlineTime=!isLocation&&Boolean(m.body)&&(!m.deleted||this.expanded.has(m.id));
         const visualCaption=inlineTime&&m.has_media&&['image','sticker','video','gif'].includes(m.type);
         return html`${showDay?html`<div class="date-separator"><span>${dayLabel(m.timestamp)}</span></div>`:null}
           <div class="message-row ${m.from_me?'outgoing':''} ${grouped?'grouped':'group-start'}">
@@ -256,7 +275,7 @@ export class WispMessageList extends LitElement {
               ${this.canAct(m)?html`<button class="message-more-action" type="button" aria-label="Message actions" title="Message actions" aria-haspopup="dialog" aria-expanded=${this.menu?.id===m.id&&this.menu?.mode==='more'} @click=${e=>this.openPanel('more',m,e)}>${icon('chevronDown')}</button>`:nothing}
               ${this.isGroup&&!grouped&&!m.from_me&&m.sender_name&&!rawId(m.sender_name)?html`<div class="sender">${m.sender_name}</div>`:null}
               ${m.deleted?html`<div class="deleted-label">Message deleted</div>${m.type!=='deleted'?html`<button class="deleted-toggle" aria-expanded=${this.expanded.has(m.id)} @click=${()=>this.toggleDeleted(m.id)}>${this.expanded.has(m.id)?'Hide deleted message':'Show deleted message'}</button>`:null}`:null}
-              ${!m.deleted||this.expanded.has(m.id)?html`${m.reply?this.quote(m.reply,`quote:${m.id}`):null}${this._media(m)}${m.body?html`<div class="body"><span class="message-text">${unsafeHTML(linkify(m.body))}</span>${this.timestamp(m,true)}</div>`:null}${this.editHistory(m)}`:null}
+              ${!m.deleted||this.expanded.has(m.id)?html`${m.reply?this.quote(m.reply,`quote:${m.id}`):null}${this._media(m)}${isLocation?this.location(m):m.body?html`<div class="body"><span class="message-text">${unsafeHTML(linkify(m.body))}</span>${this.timestamp(m,true)}</div>`:null}${this.editHistory(m)}`:null}
               ${!inlineTime?this.timestamp(m):null}
               ${m.outbox&&m.outbox.status!=='confirmed'?html`<div class="outbox-status ${m.outbox.status==='failed'?'failed':''}" role="status">${m.outbox.status==='failed'?html`<span>${m.outbox.error}</span><button type="button" @click=${()=>this.emit('outbox-retry',{id:m.outbox.id})}>Retry send</button>`:html`<span class="sync-spinner" aria-hidden="true"></span><span>${m.outbox.status==='queued'?'Waiting to send…':'Sending…'}</span>`}</div>`:nothing}
             </div>

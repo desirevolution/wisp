@@ -34,6 +34,7 @@ export function createDrafts({ storage = browserStorage() } = {}) {
     update(chat, { text: '', reply: null, image: null, preparingImage: false, error: '', serverRevision });
     return true;
   }
-  return { get, update, invalidate, subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); } };
+  const hasUnpersistedImages = () => [...entries.values()].some(draft => draft.image || draft.preparingImage);
+  return { get, update, invalidate, hasUnpersistedImages, subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); } };
 }
 export const sessionDrafts = createDrafts();

@@ -82,13 +82,13 @@ func (s *Service) TestAll(ctx context.Context) (TestReport, error) {
 			result := TestDeviceResult{Device: deviceID(endpoint), Provider: shortEndpoint(endpoint), Result: "failed"}
 			started := time.Now()
 			var sub webpush.Subscription
-			if json.Unmarshal([]byte(raw), &sub) != nil || sub.Endpoint != endpoint || sub.Keys.Auth == "" || sub.Keys.P256dh == "" {
+			if json.Unmarshal([]byte(raw), &sub) != nil || sub.Endpoint != endpoint || sub.Keys.Auth == "" || sub.Keys.P256dh == "" || validatePushEndpoint(endpoint) != nil {
 				result.Reason = "invalid_subscription"
 			} else if ctx.Err() != nil {
 				result.Reason = "cancelled"
 			} else {
 				attemptCtx, end := context.WithTimeout(ctx, 10*time.Second)
-				response, sendErr := s.send(attemptCtx, body, &sub, &webpush.Options{Subscriber: "mailto:wisp@localhost", VAPIDPublicKey: s.publicKey, VAPIDPrivateKey: s.privateKey, TTL: 300, Urgency: webpush.UrgencyHigh})
+				response, sendErr := s.send(attemptCtx, body, &sub, &webpush.Options{HTTPClient: s.httpClient, Subscriber: "mailto:wisp@localhost", VAPIDPublicKey: s.publicKey, VAPIDPrivateKey: s.privateKey, TTL: 300, Urgency: webpush.UrgencyHigh})
 				if response != nil {
 					result.HTTPStatus = response.StatusCode
 					if response.Body != nil {

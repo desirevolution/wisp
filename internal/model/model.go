@@ -2,7 +2,16 @@ package model
 
 import "time"
 
+type Location struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Name      string  `json:"name,omitempty"`
+	Address   string  `json:"address,omitempty"`
+	Live      bool    `json:"live"`
+}
+
 type Message struct {
+	Location              *Location        `json:"location,omitempty"`
 	Silent                bool             `json:"silent,omitempty"`
 	Edited                bool             `json:"edited"`
 	EditedAt              int64            `json:"edited_at"`

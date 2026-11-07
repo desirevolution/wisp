@@ -80,3 +80,47 @@ test('denied notification permission does not synchronize', async () => {
   assert.equal(await x.service.refreshPushState(), false);
   assert.deepEqual(x.calls, []);
 });
+
+test('a waiting frontend update reloads only after explicit activation', async () => {
+  const worker = new EventTarget();
+  const serviceWorker = new EventTarget();
+  const reg = new EventTarget();
+  const messages = [], states = [];
+  let reloads = 0;
+  worker.postMessage = message => messages.push(message);
+  reg.update = async () => {};
+  serviceWorker.register = async () => reg;
+  serviceWorker.controller = {};
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { serviceWorker } });
+  globalThis.window = Object.assign(new EventTarget(), { location: { reload: () => { reloads++; } } });
+  globalThis.document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
+  const service = createPwaService({ onUpdateChange: (...state) => states.push(state) });
+  service.start();
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    reg.installing = worker;
+    reg.dispatchEvent(new Event('updatefound'));
+    reg.installing = null;
+    reg.waiting = worker;
+    worker.dispatchEvent(new Event('statechange'));
+    assert.deepEqual(states.at(-1), [true, false]);
+    assert.deepEqual(messages, []);
+
+    service.dismissUpdate();
+    serviceWorker.dispatchEvent(new Event('controllerchange'));
+    assert.deepEqual(states.at(-1), [false, false]);
+    assert.equal(reloads, 0);
+
+    reg.waiting = { postMessage: worker.postMessage };
+    serviceWorker.dispatchEvent(new Event('controllerchange'));
+    assert.deepEqual(states.at(-1), [true, false]);
+    service.applyUpdate();
+    assert.deepEqual(messages, [{ type: 'SKIP_WAITING' }]);
+    assert.equal(reloads, 0);
+    serviceWorker.dispatchEvent(new Event('controllerchange'));
+    serviceWorker.dispatchEvent(new Event('controllerchange'));
+    assert.equal(reloads, 1);
+  } finally {
+    service.stop();
+  }
+});

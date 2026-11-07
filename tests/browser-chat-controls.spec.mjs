@@ -7,7 +7,7 @@ const { chromium } = await import(process.env.WISP_PLAYWRIGHT_MODULE || 'playwri
 const root=resolve('public'),chat='family@g.us',other='other@g.us',contact='49123@s.whatsapp.net';
 const chats=new Map([[chat,{id:chat,name:'Family',type:'group',last_message_at:1790760000}],[other,{id:other,name:'Work',type:'group',last_message_at:1790760000}]]);
 const prefs=new Map(),streams=new Set(),errors=[];
-let failOptions=false,sequence=0,optionRequests=0;
+let failOptions=false,sequence=0,optionRequests=0,streamAvailable=true;
 const rows=new Map([[chat,[{id:'original',chat_id:chat,sender_name:'Bea',type:'chat',body:'Hello family',timestamp:1790760000,from_me:0,reactions:[]}]]]);
 const preference=id=>prefs.get(id)||{chat_id:id,closed:false,mute_until:0,draft_revision:0,version:0};
 function change(id,action,duration){
@@ -26,7 +26,7 @@ async function incoming(){
 }
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://local');const json=(data,code=200)=>{res.writeHead(code,{'content-type':'application/json'});res.end(JSON.stringify(data))};
- if(url.pathname==='/api/events'){res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-cache'});res.write(': connected\n\n');streams.add(res);req.on('close',()=>streams.delete(res));return}
+ if(url.pathname==='/api/events'){if(!streamAvailable){res.writeHead(503);res.end();return}res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-cache'});res.write(': connected\n\n');streams.add(res);req.on('close',()=>streams.delete(res));return}
  if(url.pathname==='/api/status')return json({whatsapp:{state:'connected'},send:{enabled:true},chat_states:[...prefs.values()]});
  if(url.pathname==='/api/config')return json({sendEnabled:true,mirrorOnly:false});
  if(url.pathname==='/api/push/public-key')return json({publicKey:''});
@@ -38,7 +38,9 @@ const server=createServer(async(req,res)=>{
   return json([...chats.values()].map(c=>({...c,...preference(c.id)})).concat(chats.has(contact)?[]:[{id:contact,name:'Chris',type:'private',contact:true}]).filter(c=>c.name.toLowerCase().includes(q)));
  }
  if(url.pathname==='/api/search'){
-  const q=(url.searchParams.get('q')||'').toLowerCase();return json({chats:[...chats.values()].filter(c=>!preference(c.id).closed&&c.name.toLowerCase().includes(q)),messages:[]});
+  const q=(url.searchParams.get('q')||'').toLowerCase(),scope=url.searchParams.get('chat');
+  if(scope)return json({chats:[],messages:(rows.get(scope)||[]).filter(m=>m.body.toLowerCase().includes(q))});
+  return json({chats:[...chats.values()].filter(c=>!preference(c.id).closed&&c.name.toLowerCase().includes(q)),messages:[]});
  }
  const parts=decodeURIComponent(url.pathname).split('/');
  if(parts[1]==='api'&&parts[2]==='chats'){
@@ -182,6 +184,42 @@ try{
  await a.locator('#chatList').waitFor();assert.equal(await a.locator('#search').inputValue(),'Family');await a.waitForFunction(()=>document.activeElement?.id==='newChatBtn');
  await a.locator('#search').fill('');
  if(process.env.WISP_CHAT_QA){await a.getByRole('button',{name:'New chat',exact:true}).click();await a.locator('.chat-option').first().waitFor();await a.screenshot({path:process.env.WISP_CHAT_QA})}
+ // Scoped search keeps its result list on Back, and degraded connections keep the timeline.
+ const featurePage=await mobile.newPage();
+ featurePage.on('pageerror',e=>errors.push(e.message));
+ rows.get(chat).push({id:'location-test',chat_id:chat,type:'live_location',body:'Live location shared',
+  location:{latitude:50,longitude:7,live:true},timestamp:1790760100,from_me:0,reactions:[]});
+ await featurePage.goto(base);
+ await featurePage.locator(`#chatList [data-id="${chat}"]`).click();
+ const timeline=featurePage.locator('#messages');
+ const snapshot=timeline.locator('[data-message-id="location-test"]');
+ await snapshot.getByText('Live location · Snapshot').waitFor();
+ const mapURL=new URL(await snapshot.getByRole('link',{name:'Open map'}).getAttribute('href'));
+ assert.equal(mapURL.searchParams.get('mlat'),'50');
+ assert.equal(mapURL.searchParams.get('mlon'),'7');
+ await menu(featurePage);
+ await featurePage.getByRole('button',{name:'Search this chat'}).click();
+ const search=featurePage.getByRole('searchbox',{name:'Search messages in this chat'});
+ await search.fill('Hello family');
+ const hit=featurePage.getByRole('button',{name:/Hello family/});
+ await hit.click();
+ await timeline.locator('[data-message-id="original"].highlight').waitFor();
+ await featurePage.getByRole('button',{name:'Back to search results'}).click();
+ await hit.waitFor();
+ assert.equal(await search.inputValue(),'Hello family');
+ await featurePage.getByRole('dialog',{name:'Search this chat'}).getByRole('button',{name:'Close',exact:true}).click();
+ await search.waitFor({state:'hidden'});
+ emit('connection',{state:'disconnected'});
+ await featurePage.locator('.conversation-title').getByText('WhatsApp disconnected').waitFor();
+ assert.equal(await snapshot.isVisible(),true);
+ assert.equal(await featurePage.locator('#composerInput').isVisible(),false);
+ emit('connection',{state:'connected'});
+ await featurePage.locator('#composerInput').waitFor();
+ streamAvailable=false;
+ for(const response of streams)response.destroy();
+ await featurePage.locator('.conversation-title').getByText('Live updates interrupted').waitFor();
+ assert.equal(await snapshot.isVisible(),true);
+ streamAvailable=true;
  assert.deepEqual(errors,[]);
  await desktop.close();await mobile.close();
  console.log('Chat controls: two-device close/mute, confirmation, remote/offline draft deletion, unread counts, hidden search, expiration, chooser/new contact, nonmodal desktop picker/mobile page, keyboard selection, instant local search, mobile mute icons/bottom sheets, retry, Escape and Browser Back passed');

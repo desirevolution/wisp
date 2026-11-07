@@ -21,6 +21,7 @@ import (
 
 type Service struct {
 	testMu                sync.Mutex
+	httpClient            *http.Client
 	st                    *store.Store
 	bus                   *events.Bus
 	wg                    sync.WaitGroup
@@ -48,7 +49,7 @@ type payload struct {
 }
 
 func New(st *store.Store, bus *events.Bus) (*Service, error) {
-	s := &Service{st: st, bus: bus, stop: make(chan struct{}), send: webpush.SendNotificationWithContext, logf: log.Printf}
+	s := &Service{st: st, bus: bus, stop: make(chan struct{}), send: webpush.SendNotificationWithContext, logf: log.Printf, httpClient: pushHTTPClient()}
 	pub := st.ConfigString("pushVapidPublicKey", "")
 	priv := st.ConfigString("pushVapidPrivateKey", "")
 	if pub == "" || priv == "" {
@@ -87,6 +88,9 @@ func (s *Service) Subscribe(raw []byte) error {
 	}
 	if sub.Endpoint == "" || sub.Keys.P256dh == "" || sub.Keys.Auth == "" {
 		return fmt.Errorf("incomplete push subscription")
+	}
+	if err := validatePushEndpoint(sub.Endpoint); err != nil {
+		return err
 	}
 	if err := s.st.SavePushSubscription(sub.Endpoint, raw); err != nil {
 		return err
@@ -145,6 +149,12 @@ func (s *Service) notify(m model.Message) {
 		default:
 			body = "New message"
 		}
+	}
+	switch m.Type {
+	case "location":
+		body = "Location shared"
+	case "live_location":
+		body = "Live location shared"
 	}
 	b, err := marshalPayload(payload{Title: title, Body: body, ChatID: m.ChatID, MessageID: m.ID})
 	if err != nil {
@@ -211,6 +221,10 @@ func truncate(s string, limit int) string {
 
 func (s *Service) deliver(b []byte, sub *webpush.Subscription, messageID string, chatID ...string) {
 	device, provider := deviceID(sub.Endpoint), shortEndpoint(sub.Endpoint)
+	if validatePushEndpoint(sub.Endpoint) != nil {
+		s.logf("[push] event=invalid_endpoint device=%s provider=%s", device, provider)
+		return
+	}
 	for attempt := 0; attempt < 3; attempt++ {
 		if s.ctx.Err() != nil || (len(chatID) > 0 && s.st.ChatMuted(chatID[0])) {
 			return
@@ -218,7 +232,7 @@ func (s *Service) deliver(b []byte, sub *webpush.Subscription, messageID string,
 		started := time.Now()
 		ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
 		resp, err := s.send(ctx, b, sub, &webpush.Options{
-			Subscriber: "mailto:wisp@localhost", VAPIDPublicKey: s.publicKey,
+			HTTPClient: s.httpClient, Subscriber: "mailto:wisp@localhost", VAPIDPublicKey: s.publicKey,
 			VAPIDPrivateKey: s.privateKey, TTL: 86400, Urgency: webpush.UrgencyHigh,
 		})
 		status := 0

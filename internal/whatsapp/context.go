@@ -83,7 +83,9 @@ func (s *Service) quote(ctx context.Context, chat string, msg *waE2E.Message) *m
 	if name == "" && s.store != nil {
 		name = s.store.KnownContactName(ctx, j.String())
 	}
-	kind, body, _ := summary(c.GetQuotedMessage())
+	var quoted model.Message
+	normalizeContent(&quoted, c.GetQuotedMessage())
+	kind, body := quoted.Type, quoted.Body
 	qchat := c.GetRemoteJID()
 	if qchat == "" {
 		qchat = chat

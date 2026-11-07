@@ -6,6 +6,5 @@ const lock=JSON.parse(read('package-lock.json'));
 assert.equal(lock.version,version,'lockfile version');
 assert.equal(lock.packages[''].version,version,'lockfile root version');
 assert.match(read('internal/appconfig/config.go'),/var Version = "dev"/,'backend version defaults to dev and is injected at build time');
-assert.ok(read('frontend/public/sw.js').includes(`CACHE='wisp-${version}'`),'service worker version');
 assert.match(read('README.md'),/^# Wisp(?: [^\n]+)?\n/,'README heading');
 console.log(`Version consistency: ${version}`);

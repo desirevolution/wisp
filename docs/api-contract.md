@@ -217,3 +217,9 @@ response acknowledges Wisp state, not successful WhatsApp delivery. Failed jobs
 are persisted for retry; changing modes cancels pending jobs from the old mode.
 Incoming own-device reads publish `unread` events and never queue receipts again.
 Closing a chat and loading the overview do not send WhatsApp read receipts.
+
+
+The timeline and message-context responses may include a `location` object with
+`latitude`, `longitude`, optional `name` and `address`, and a `live` boolean.
+A live location represents the first point Wisp received for that message.
+Use `GET /api/search?q=...&chat=...` to limit message results to one chat.

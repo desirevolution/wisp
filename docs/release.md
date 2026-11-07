@@ -65,7 +65,7 @@ There is no prescribed seven-day observation period.
 - [ ] Set up repository and GHCR publishing permissions/workflow.
 - [ ] Publish a versioned multi-platform image; record its digest.
 - [ ] RC images use only explicit RC tags; do not move stable `latest` to an RC.
-- [ ] After acceptance, change package/lock/backend/service-worker/README versions
+- [ ] After acceptance, change package/lock/backend/README versions
   together, run all checks and publish `1.0.0` plus the stable tag.
 - [ ] Publish the stable release notes and the image-based Compose instructions.
 
@@ -79,8 +79,10 @@ this source package.
 - The binary release job runs the Linux amd64 binary and verifies that
   `--version` matches the release tag before uploading assets.
 - Verify the same tag in Settings and `/api/status`.
-- Package/service-worker versions track source assets separately; runtime
-  version reporting comes from the embedded Go build version.
+- The service worker is fingerprinted from the built frontend. Runtime version
+  reporting comes from the embedded Go build version. After deployment, a running
+  PWA downloads the new frontend in the background and offers Update now or Later.
+  Update now activates the waiting worker and reloads the current tab.
 - Smoke-test the daily update hint against a newer stable release. Drafts,
   prereleases and invalid release metadata must not produce an update hint.
 

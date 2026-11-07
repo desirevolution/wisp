@@ -2,6 +2,7 @@ import {loadUnreadOpening} from './services/chat-opening.js';
 import {createReadTracker,unreadCount,closeReadNotifications,unreadTabTitle} from './services/unread.js';
 import './components/wisp-chat-picker.js';
 import './components/wisp-chat-controls.js';
+import './components/wisp-chat-search.js';
 import {sessionOutbox} from './services/outbox.js';
 import { sessionDrafts } from './core/drafts.js';
 import { chatMuted, muteLabel } from './core/chat-state.js';
@@ -71,8 +72,11 @@ const earlyMediaEvents=new Map();
 let imageScrollIntent=null;
 function showToast(message,kind='error'){let el=$('#appToast');if(!el){el=document.createElement('div');el.id='appToast';app.appendChild(el)}el.className=`app-toast ${kind}`;el.textContent=message;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{el.hidden=true},4500)}
 let navigation,conversation,gallery,pwa,viewHistory;
+let appUpdateAvailable=false,appUpdateApplying=false;
+let hadConnection=false,liveInterrupted=false;
+const canReadHistory=()=>hadConnection&&!['disconnecting','waiting_for_qr','authenticating'].includes(state.connection.state);
 const readTracker=createReadTracker({getState:()=>state,apiJson,onState:applyChatState,onRead:closeReadNotifications,
- canRead:()=>state.connection.state==='connected'&&document.visibilityState==='visible'&&Boolean(state.selectedChatId)&&state.view==='chat'&&!state.chatPreparing&&!state.messageLoading&&!state.chatLoadError&&!state.imageViewer&&!state.settingsOpen&&!state.chatPickerOpen&&app.classList.contains('open')&&!app.classList.contains('initial-setup-mode'),
+ canRead:()=>state.connection.state==='connected'&&document.visibilityState==='visible'&&Boolean(state.selectedChatId)&&state.view==='chat'&&!state.chatPreparing&&!state.messageLoading&&!state.chatLoadError&&!state.imageViewer&&!state.settingsOpen&&!state.chatPickerOpen&&viewHistory?.current().overlay!=='search'&&app.classList.contains('open')&&!app.classList.contains('initial-setup-mode'),
  isRendered:id=>[...app.querySelectorAll('#messages [data-message-id]')].some(el=>el.dataset.messageId===id)
 });
 const markVisibleChatRead=()=>void readTracker.markVisible();
@@ -84,6 +88,7 @@ function rememberPosition(){
   if(!state.chatPreparing&&state.selectedChatId&&state.view==='chat')chatPositions.set(state.selectedChatId,{anchor:conversation?.captureScrollAnchor(),bottom:conversation?.isNearBottom()});
 }
 function backToSelection(fromHistory=false){
+  if(!fromHistory&&viewHistory?.current().searchMessage){history.back();return}
   if(!fromHistory&&state.imageViewer){closeImageViewer();return}
   if(!fromHistory&&viewHistory?.toOverview())return;
   dismissImageViewer();imageScrollIntent=null;
@@ -161,6 +166,26 @@ async function closeChatControls(){
  hideChatPicker();
  $('#chatControls')?.hide();
  if(viewHistory.current().overlay){await new Promise(resolve=>{window.addEventListener('popstate',resolve,{once:true});viewHistory.closeOverlay()})}
+}
+async function openChatSearch(){
+  const chat=state.selectedChatId;
+  await closeChatControls();
+  if(!chat||chat!==state.selectedChatId||state.view!=='chat')return;
+  viewHistory.openOverlay('search');
+  await $('#chatSearch').open(chat,{reset:true});
+}
+function closeChatSearch(){
+  $('#chatSearch')?.hide();
+  viewHistory.closeOverlay();
+  $('#chatMenuBtn')?.focus();
+  markVisibleChatRead();
+}
+function openChatSearchHit(messageId){
+  const chat=state.selectedChatId;
+  if(!chat||viewHistory.current().overlay!=='search')return;
+  $('#chatSearch').hide();
+  viewHistory.openSearchHit(chat,messageId);
+  void openMessage(chat,messageId,null,{preserveHistory:true});
 }
 async function completeChatAction({action,state:next,option,pickerActive}){
  applyChatState(next);
@@ -266,7 +291,10 @@ async function selectChat(id,{restore=false}={}){readTracker.reset(id);if(state.
   }
 }
 
-async function openMessage(chatId,messageId,loaded=null){if(state.imageViewer)dismissImageViewer();viewHistory?.openChat(chatId);imageScrollIntent=null;
+async function openMessage(chatId,messageId,loaded=null,{preserveHistory=false}={}){
+  if(state.imageViewer)dismissImageViewer();
+  if(!preserveHistory)viewHistory?.openChat(chatId);
+  imageScrollIntent=null;
   rememberPosition();
   const token=++chatLoadToken;
   state.selectedChatId=chatId;state.view='chat';if(!Number.isSafeInteger(state.chatStates.get(chatId)?.unread_sequence))state.unread.delete(chatId);conversation.resetForChat();app.classList.add('open');beginChatPreparation(token);
@@ -274,6 +302,7 @@ async function openMessage(chatId,messageId,loaded=null){if(state.imageViewer)di
   try{
     const data=loaded||await apiJson(`/api/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/context`);
     if(token!==chatLoadToken||state.selectedChatId!==chatId)return;
+    if(!data?.some(message=>message.id===messageId))throw new Error('Message not found.');
     state.messages=mergeKnownReactions(data,state.reactionStates);state.hasOlder=true;state.messageLoading=false;
     if(await revealPreparedChat(token,{messageId})){
       await conversation.highlightMessage(messageId);if(state.activePane==='right'&&!state.keyboardNavActive)focusComposer();
@@ -377,12 +406,14 @@ async function refreshSelectedMessages(){
 }
 function renderShell({refreshMessages=true}={}){
   const connected=state.connection.state==='connected',initialSetup=connected&&state.connection.initialBootstrap===true;
-  const paused=!connected||initialSetup;
+  if(connected)hadConnection=true;
+  const paused=(!connected&&!canReadHistory())||initialSetup;
+  const connectionHint=!connected&&!paused?'WhatsApp disconnected':liveInterrupted&&connected?'Live updates interrupted':'';
   const oldMessages=$('#messages');
   if(paused&&oldMessages&&!oldMessages.hidden&&!suspendedAnchor){suspendedAnchor=conversation?.captureScrollAnchor();conversation?.clearInitialTimer()}
   app.classList.toggle('chat-preparing',state.chatPreparing);
   app.classList.toggle('picker-open',state.chatPickerOpen&&!paused);
-  app.classList.toggle('connection-mode',!connected);
+  app.classList.toggle('connection-mode',paused&&!initialSetup);
   app.classList.toggle('initial-setup-mode',initialSetup);
   render(html`
     <div class="initial-setup" ?hidden=${!initialSetup} role="status" aria-live="polite"><div class="initial-setup-card"><span class="connection-spinner" aria-hidden="true"></span><h2>${state.connection.syncPhase==='checking_history'?'Finishing setup…':state.connection.syncPhase==='settling_history'?'Preparing chats…':'Importing messages…'}</h2><p>Preparing your chats, messages and contact information.</p></div></div>
@@ -391,24 +422,31 @@ function renderShell({refreshMessages=true}={}){
       <div id="searchWrap" class="search" data-key="search" ?hidden=${paused||state.chatPickerOpen}><input id="search" type="search" aria-label="Search chats and messages" placeholder="Search chats and messages" .value=${live(state.filter)} autocomplete="off" autocorrect="off" spellcheck="false"></div>
       <wisp-chat-list id="chatList" class="chat-list" ?hidden=${paused||state.chatPickerOpen}></wisp-chat-list>
       <wisp-chat-picker id="chatPicker" class="chat-picker" .blocked=${paused} .chatStates=${state.chatStates} ?hidden=${paused||!state.chatPickerOpen} @chat-picker-close=${()=>void closeChatControls()} @chat-action-complete=${e=>void completeChatAction(e.detail).catch(()=>showToast('Chat was opened, but the view could not refresh. Try again.'))}></wisp-chat-picker>
-      <div class="connection-summary" ?hidden=${connected}><i class="dot"></i><span>${connectionLabel()}</span></div>
+      <div class="connection-summary" ?hidden=${!connectionHint&&connected}><i class="dot"></i><span role="status">${connectionHint||connectionLabel()}</span></div>
       <div id="keyboardHint" class="keyboard-hint" aria-hidden="true" hidden>↑↓ Navigate · Enter Open</div>
     </aside>
     <div id="sidebarResize" class="sidebar-resize" role="separator" tabindex="0" aria-label="Chat list width" aria-orientation="vertical" title="Resize chat list (arrow keys)" ?hidden=${paused}></div>
     <main class=${state.imageViewer?'conversation image-open':'conversation'} ?hidden=${initialSetup}>
-      <div class="conversation-top top"><button class="back" id="back" aria-label=${state.imageViewer||state.view==='gallery'?'Back to chat':'Back to chats'} title=${state.imageViewer||state.view==='gallery'?'Back to chat':'Back to chats'} ?hidden=${paused||!state.selectedChatId}>${icon('back')}</button><div class="conversation-heading"><h2 id="conversationTitle">Messages</h2><span id="headerMuted" class="chat-muted" hidden>${icon('mute')}</span></div><button class="icon-btn media-btn" id="mediaBtn" aria-label="Media, links and documents" title="Media, links and documents" ?disabled=${state.chatPreparing} ?hidden=${paused||!state.selectedChatId}>${icon('grid')}</button><button id="chatMenuBtn" class="icon-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Chat menu" title="Chat menu" ?hidden=${paused||!state.selectedChatId} @pointerdown=${e=>{if(document.activeElement?.matches('textarea'))e.preventDefault()}} @click=${()=>$('#chatControls')?.mode?void closeChatControls():showChatControls('menu')}>${icon('more')}</button></div>
+      <div class="conversation-top top"><button class="back" id="back" aria-label=${state.imageViewer||state.view==='gallery'?'Back to chat':viewHistory?.current().searchMessage?'Back to search results':'Back to chats'} title=${state.imageViewer||state.view==='gallery'?'Back to chat':viewHistory?.current().searchMessage?'Back to search results':'Back to chats'} ?hidden=${paused||!state.selectedChatId}>${icon('back')}</button><div class="conversation-heading"><div class="conversation-title"><h2 id="conversationTitle">Messages</h2>${connectionHint?html`<small role="status">${connectionHint}</small>`:null}</div><span id="headerMuted" class="chat-muted" hidden>${icon('mute')}</span></div><button class="icon-btn media-btn" id="mediaBtn" aria-label="Media, links and documents" title="Media, links and documents" ?disabled=${state.chatPreparing} ?hidden=${paused||!state.selectedChatId}>${icon('grid')}</button><button id="chatMenuBtn" class="icon-btn" ?disabled=${!connected} aria-haspopup="dialog" aria-expanded="false" aria-label="Chat menu" title="Chat menu" ?hidden=${paused||!state.selectedChatId} @pointerdown=${e=>{if(document.activeElement?.matches('textarea'))e.preventDefault()}} @click=${()=>$('#chatControls')?.mode?void closeChatControls():showChatControls('menu')}>${icon('more')}</button></div>
       <wisp-message-list id="messages" class="messages" .inert=${state.chatPreparing||Boolean(state.imageViewer)} aria-busy=${state.chatPreparing?'true':'false'} ?hidden=${paused||state.view!=='chat'}></wisp-message-list>
-      <div id="chatLoading" class="chat-loading" role="status" aria-live="polite" ?hidden=${!state.chatPreparing||paused||state.view!=='chat'}>${state.chatLoadError?html`<div><b>Could not load messages</b><p>${state.chatLoadError}</p><button @click=${()=>selectChat(state.selectedChatId)}>Try again</button></div>`:html`<span>Loading messages…</span>`}</div>
+      <div id="chatLoading" class="chat-loading" role="status" aria-live="polite" ?hidden=${!state.chatPreparing||paused||state.view!=='chat'}>${state.chatLoadError?html`<div><b>Could not load messages</b><p>${state.chatLoadError}</p><button @click=${()=>{const hit=viewHistory.current().searchMessage;return hit?openMessage(state.selectedChatId,hit,null,{preserveHistory:true}):selectChat(state.selectedChatId)}}>Try again</button></div>`:html`<span>Loading messages…</span>`}</div>
       <wisp-gallery id="gallery" class="messages" ?hidden=${paused||state.view!=='gallery'}></wisp-gallery>
       <button id="newMessages" class="new-messages" hidden></button>
-      <wisp-composer id="composer" .inert=${state.chatPreparing||Boolean(state.imageViewer)} ?hidden=${paused||!state.sendEnabled||state.mirrorOnly||!state.selectedChatId||state.view!=='chat'}></wisp-composer>
+      <wisp-composer id="composer" .inert=${state.chatPreparing||Boolean(state.imageViewer)} ?hidden=${paused||!state.sendEnabled||state.mirrorOnly||!connected||!state.selectedChatId||state.view!=='chat'}></wisp-composer>
       <section id="imageViewer" class="image-viewer" role="region" aria-label="Image viewer" ?hidden=${paused||!state.imageViewer}>
         ${state.imageViewer?html`<div class="image-viewer-stage"><img src=${state.imageViewer.src} alt=${state.imageViewer.alt||'Image'}></div><p>${state.imageViewer.alt||''}</p>`:null}
       </section>
-      <wisp-connection id="connectionView" ?hidden=${connected}></wisp-connection>
+      <wisp-connection id="connectionView" ?hidden=${!paused||connected}></wisp-connection>
     </main>
-    <div id="updateNotice" class="update-notice" role="status" ?hidden=${!state.update?.available}>Update ${state.update?.latest} available <a href=${state.update?.url||'https://github.com/desirevolution/wisp/releases'} target="_blank" rel="noopener noreferrer">View release</a></div>
-    <wisp-chat-controls id="chatControls" @chat-controls-close=${()=>void closeChatControls()} @chat-action-complete=${e=>void completeChatAction(e.detail).catch(()=>showToast('Chat settings were saved, but the view could not refresh. Try again.'))}></wisp-chat-controls>
+    <div class="update-notice app-update-notice" ?hidden=${!appUpdateAvailable}><span role="status">Wisp app update ready.</span>
+      <button id="applyAppUpdate" type="button" ?disabled=${appUpdateApplying}>${appUpdateApplying?'Updating…':'Update now'}</button>
+      <button id="dismissAppUpdate" type="button" ?disabled=${appUpdateApplying}>Later</button>
+    </div>
+    <div id="updateNotice" class="update-notice" role="status" ?hidden=${appUpdateAvailable||!state.update?.available}>Update ${state.update?.latest} available <a href=${state.update?.url||'https://github.com/desirevolution/wisp/releases'} target="_blank" rel="noopener noreferrer">View release</a></div>
+    <wisp-chat-controls id="chatControls" @chat-controls-close=${()=>void closeChatControls()} @chat-search-open=${openChatSearch} @chat-action-complete=${e=>void completeChatAction(e.detail).catch(()=>showToast('Chat settings were saved, but the view could not refresh. Try again.'))}></wisp-chat-controls>
+    <wisp-chat-search id="chatSearch"
+      @chat-search-close=${closeChatSearch} @chat-search-result=${event=>openChatSearchHit(event.detail)}>
+    </wisp-chat-search>
     <wisp-settings id="settings" ?hidden=${!state.settingsOpen}></wisp-settings>
     <div id="appToast" role="status" aria-live="polite" hidden></div>
   `,app);
@@ -497,6 +535,11 @@ function wireShell(){
   once('#composer','image-sent',event=>followSentImage(event.detail));
   const messages=$('#messages');if(messages&&!messages.dataset.imageWired){messages.dataset.imageWired='true';messages.addEventListener('outbox-preview-ready',e=>sessionOutbox.completePreview(e.detail.id));messages.addEventListener('outbox-retry',event=>{if(state.connection.state==='connected'&&state.sendEnabled&&!state.mirrorOnly)void sessionOutbox.retry(event.detail.id)});messages.addEventListener('image-open',event=>openImageViewer(event.detail));for(const event of ['animationend','animationcancel'])messages.addEventListener(event,e=>{if(e.target===messages&&e.animationName==='chat-message-enter')app.classList.remove('chat-revealing')})}
   once('#settingsBtn','click',openSettings);
+  once('#applyAppUpdate','click',()=>{
+    if(sessionDrafts.hasUnpersistedImages()&&!window.confirm('Reload Wisp and discard unsent image drafts?'))return;
+    pwa.applyUpdate();
+  });
+  once('#dismissAppUpdate','click',()=>pwa.dismissUpdate());
   once('#newMessages','click',()=>conversation.scrollBottom());
   once('#mediaBtn','click',()=>{rememberPosition();$('#messages')?.closePanel(false);$('#composer')?.closePicker();return gallery.open('media')});
   once('#connectionView','connection-reconnect',reconnectWhatsApp);
@@ -504,19 +547,25 @@ function wireShell(){
   wireSettings($('#settings'));wireComposer();
 }
 function installSettingsKeys(){removeSettingsKeyHandler();if(!state.settingsOpen)return;settingsKeyHandler=e=>{if(e.key==='Escape'){e.preventDefault();closeSettings()}};document.addEventListener('keydown',settingsKeyHandler)}
-function wireSettings(el=$('#settings')){if(!el)return;if(el.dataset.wired){if(state.settingsOpen)installSettingsKeys();return};el.dataset.wired='true';installSettingsKeys();el.addEventListener('settings-close',()=>closeSettings());el.addEventListener('follow-change',e=>{saveConfig({followNewMessages:e.detail}).catch(()=>showToast('Could not save setting.'))});el.addEventListener('read-mode-change',async e=>{el.readModeBusy=true;try{await saveConfig({readMode:e.detail})}catch{syncSettings();showToast('Could not save read setting.')}finally{el.readModeBusy=false}});el.addEventListener('settings-reconnect',()=>{closeSettings();reconnectWhatsApp()});el.addEventListener('settings-unlink',async()=>{closeSettings();state.selectedChatId=null;state.connection={...state.connection,state:'disconnecting',qr:null,error:null};renderShell();try{const r=await fetch('/api/whatsapp/logout',{method:'POST'});if(!r.ok)throw new Error('Unlink failed')}catch{state.connection={...state.connection,state:'error',error:'Could not unlink WhatsApp.'};renderShell()}});el.addEventListener('push-toggle',()=>pwa.togglePush().catch(err=>showToast(err?.message||'Could not update push notifications.')));el.addEventListener('install-app',()=>pwa.installApp())}
+function wireSettings(el=$('#settings')){if(!el)return;if(el.dataset.wired){if(state.settingsOpen)installSettingsKeys();return};el.dataset.wired='true';installSettingsKeys();el.addEventListener('settings-close',()=>closeSettings());el.addEventListener('follow-change',e=>{saveConfig({followNewMessages:e.detail}).catch(()=>showToast('Could not save setting.'))});el.addEventListener('read-mode-change',async e=>{el.readModeBusy=true;try{await saveConfig({readMode:e.detail})}catch{syncSettings();showToast('Could not save read setting.')}finally{el.readModeBusy=false}});el.addEventListener('settings-reconnect',()=>{closeSettings();reconnectWhatsApp()});el.addEventListener('settings-unlink',async()=>{closeSettings();hadConnection=false;state.selectedChatId=null;state.connection={...state.connection,state:'disconnecting',qr:null,error:null};renderShell();try{const r=await fetch('/api/whatsapp/logout',{method:'POST'});if(!r.ok)throw new Error('Unlink failed')}catch{state.connection={...state.connection,state:'error',error:'Could not unlink WhatsApp.'};renderShell()}});el.addEventListener('push-toggle',()=>pwa.togglePush().catch(err=>showToast(err?.message||'Could not update push notifications.')));el.addEventListener('install-app',()=>pwa.installApp())}
 
 async function handleLaunchTarget(){
   const q=new URLSearchParams(location.search),chat=q.get('chat'),message=q.get('message');
   if(chat){history.replaceState(history.state,'',location.pathname);if(message)await openMessage(chat,message);else await selectChat(chat);return}
   const saved=viewHistory.current();
-  if(saved.chatId){await selectChat(saved.chatId,{restore:true});if(saved.view==='image'&&saved.image)openImageViewer(saved.image,{history:false});if(saved.view==='gallery')await gallery.open(saved.kind,{history:false})}
+  if(saved.searchMessage){await openMessage(saved.chatId,saved.searchMessage,null,{preserveHistory:true});return}
+  if(saved.chatId){await selectChat(saved.chatId,{restore:true});if(saved.view==='image'&&saved.image)openImageViewer(saved.image,{history:false});if(saved.view==='gallery')await gallery.open(saved.kind,{history:false});if(saved.overlay==='search')await $('#chatSearch')?.open(saved.chatId)}
 }
 conversation=createConversation({app,store,apiJson,onRetryMedia:retryMedia,onReply:selectReply,onReaction:setReaction,onQuote:openQuote});
 gallery=createGallery({app,store,apiJson,onViewChange:renderShell,onOpen:kind=>viewHistory.openGallery(state.selectedChatId,kind),openMessage});
 navigation=createNavigation({app,store,selectChat,openMessage,focusComposer,onError:message=>showToast(message)});
 viewHistory=createViewHistory({onChange:async target=>{
   if(target.overlay!=='new')hideChatPicker();
+  if(target.overlay!=='search')$('#chatSearch')?.hide();
+  if(target.searchMessage){
+    await openMessage(target.chatId,target.searchMessage,null,{preserveHistory:true});
+    return;
+  }
   if(!target.overlay)$('#chatControls')?.hide();
   const overlay=['new','menu','mute','close'].includes(target.overlay)?target.overlay:null;
   if(target.view==='overview'){if(state.selectedChatId||app.classList.contains('open'))backToSelection(true);else renderShell({refreshMessages:false});if(overlay)showChatControls(overlay);return}
@@ -526,7 +575,9 @@ viewHistory=createViewHistory({onChange:async target=>{
   if(target.view==='gallery')await gallery.open(target.kind,{history:false});
   else if(state.view==='gallery')returnFromGallery();
   if(target.view==='image'&&target.image)openImageViewer(target.image,{history:false});
+  if(target.overlay==='search')await $('#chatSearch')?.open(target.chatId);
   if(overlay)showChatControls(overlay);
+  else markVisibleChatRead();
 }});
 sessionOutbox.subscribe(({type,entry})=>{
   if(type==='acknowledged'&&entry){
@@ -543,8 +594,11 @@ sessionOutbox.subscribe(({type,entry})=>{
   void conversation.renderMessages().then(()=>{if(state.selectedChatId!==chat||state.view!=='chat')return;if(type==='enqueued'||bottom)conversation.scrollBottom({initial:true,force:true});else conversation.restoreScrollAnchor(anchor)});
 });
 navigation.installGlobalListeners();
-pwa=createPwaService({store,apiJson,onStateChange:()=>{if(state.settingsOpen)renderSettings()},onError:message=>showToast(message)});
-pwa.start();
+pwa=createPwaService({store,apiJson,onStateChange:()=>{if(state.settingsOpen)renderSettings()},onError:message=>showToast(message),
+ onUpdateChange:(available,applying)=>{
+   if(appUpdateAvailable===available&&appUpdateApplying===applying)return;
+   appUpdateAvailable=available;appUpdateApplying=applying;renderUpdateNotice();
+ }});
 const bus=createEventBus();
 connectLiveEvents(bus);
 async function reconcileUnread(){
@@ -553,7 +607,8 @@ async function reconcileUnread(){
  if(document.visibilityState==='visible'&&id&&state.view==='chat'&&!state.chatPreparing&&p?.last_incoming_id&&!state.messages.some(m=>m.id===p.last_incoming_id))await refreshSelectedMessages();
  markVisibleChatRead();
 }
-bus.on('live:open',()=>{void loadConfig().then(syncSettings).catch(()=>{});void reconcileUnread().then(()=>{syncSettings();renderUpdateNotice()}).catch(()=>{});loadChats({render:false}).then(()=>{renderChatList();renderConversationHeader()}).catch(()=>{});syncReactions().catch(()=>{})});
+bus.on('live:error',()=>{if(!liveInterrupted){liveInterrupted=true;renderShell({refreshMessages:false})}});
+bus.on('live:open',()=>{if(liveInterrupted){liveInterrupted=false;renderShell({refreshMessages:false})}void loadConfig().then(syncSettings).catch(()=>{});void reconcileUnread().then(()=>{syncSettings();renderUpdateNotice()}).catch(()=>{});loadChats({render:false}).then(()=>{renderChatList();renderConversationHeader()}).catch(()=>{});syncReactions().catch(()=>{})});
 bus.on('live:unread',next=>{applyChatState(next);markVisibleChatRead()});
 bus.on('live:chat-state',next=>{applyChatState(next);void loadChats().catch(()=>showToast('Could not refresh chat list.'))});
 bus.on('live:edit',data=>updateEditView(data).catch(console.error));
@@ -602,6 +657,7 @@ bus.on('live:media',async d=>{
 bus.on('live:metadata',()=>loadChats());
 bus.on('live:parse-error',({type,error})=>console.warn(`Invalid SSE ${type} payload`,error));
 async function init(){
+  pwa.start();
   void pwa.refreshPushState();
   try{
     await Promise.all([loadStatus({render:false}),loadConfig(),loadChats({render:false})]);

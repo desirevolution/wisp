@@ -109,7 +109,7 @@ See [troubleshooting and limitations](docs/limitations.md).
 
 ## Development and release checks
 
-With local Node 24, Go 1.26 and a C compiler for race tests:
+With local Node 24, Go 1.26.10 or newer and a C compiler for race tests:
 
 ```sh
 npm ci

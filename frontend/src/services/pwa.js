@@ -1,6 +1,13 @@
 /** Browser/PWA lifecycle and per-device Web Push subscriptions. */
-export function createPwaService({ store, apiJson, onStateChange = () => {}, onError = () => {} }) {
+export function createPwaService({ store, apiJson, onStateChange = () => {}, onUpdateChange = () => {}, onError = () => {} }) {
   let registrationPromise;
+  let workerRegistration;
+  let installing;
+  let dismissed;
+  let applying = false;
+  let applyTimer;
+  let checkTimer;
+  let lastCheck = 0;
   let operation = Promise.resolve();
   let toggling = null;
   const set = (key, value) => { store.set(key, value); onStateChange(); return value; };
@@ -11,19 +18,81 @@ export function createPwaService({ store, apiJson, onStateChange = () => {}, onE
     return next;
   };
 
-  async function registration() {
+  function registerWorker() {
     if (!registrationPromise) {
-      registrationPromise = navigator.serviceWorker.register('/sw.js')
-        .then(() => navigator.serviceWorker.ready)
+      registrationPromise = navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+        .then(reg => {
+          workerRegistration = reg;
+          reg.addEventListener?.('updatefound', watchInstalling);
+          watchInstalling();
+          return reg;
+        })
         .catch(error => { registrationPromise = null; throw error; });
     }
+    return registrationPromise;
+  }
+
+  async function registration() {
     let timer;
     try {
       return await Promise.race([
-        registrationPromise,
+        registerWorker().then(() => navigator.serviceWorker.ready),
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Service worker is not ready. Please reload and try again.')), 10000); }),
       ]);
     } finally { clearTimeout(timer); }
+  }
+
+  function announceUpdate() {
+    const waiting = workerRegistration?.waiting;
+    onUpdateChange(Boolean(waiting && navigator.serviceWorker.controller && waiting !== dismissed), applying);
+  }
+
+  function watchInstalling() {
+    installing?.removeEventListener('statechange', announceUpdate);
+    installing = workerRegistration?.installing;
+    installing?.addEventListener('statechange', announceUpdate);
+    announceUpdate();
+  }
+
+  async function checkForUpdate() {
+    if (document.visibilityState !== 'visible' || navigator.onLine === false || !('serviceWorker' in navigator)) return;
+    if (Date.now() - lastCheck < 60_000) return;
+    lastCheck = Date.now();
+    try {
+      const reg = await registerWorker();
+      await reg.update();
+      announceUpdate();
+    } catch (error) {
+      console.debug('PWA update check unavailable', error);
+    }
+  }
+
+  function dismissUpdate() {
+    dismissed = workerRegistration?.waiting;
+    announceUpdate();
+  }
+
+  function applyUpdate() {
+    const waiting = workerRegistration?.waiting;
+    if (!waiting || applying) return;
+    applying = true;
+    announceUpdate();
+    applyTimer = setTimeout(() => {
+      applying = false;
+      announceUpdate();
+      onError('Could not apply the app update. Please try again.');
+    }, 10_000);
+    waiting.postMessage({ type: 'SKIP_WAITING' });
+  }
+
+  function onControllerChange() {
+    if (applying) {
+      clearTimeout(applyTimer);
+      applying = false;
+      window.location.reload();
+    } else {
+      announceUpdate();
+    }
   }
 
   async function updateSubscription(method, data) {
@@ -109,7 +178,10 @@ export function createPwaService({ store, apiJson, onStateChange = () => {}, onE
   }
 
   function onResume() {
-    if (document.visibilityState === 'visible') void refreshPushState();
+    if (document.visibilityState === 'visible') {
+      void refreshPushState();
+      void checkForUpdate();
+    }
   }
 
   async function installApp() {
@@ -136,16 +208,25 @@ export function createPwaService({ store, apiJson, onStateChange = () => {}, onE
     window.addEventListener('online', onResume);
     document.addEventListener('visibilitychange', onResume);
     if ('serviceWorker' in navigator) {
-      registration().catch(error => console.warn('Service worker registration failed', error));
+      navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+      window.addEventListener('focus', checkForUpdate);
+      checkTimer = setInterval(checkForUpdate, 30 * 60_000);
+      void checkForUpdate();
     }
   }
 
   function stop() {
+    navigator.serviceWorker?.removeEventListener('controllerchange', onControllerChange);
+    workerRegistration?.removeEventListener('updatefound', watchInstalling);
+    installing?.removeEventListener('statechange', announceUpdate);
+    window.removeEventListener('focus', checkForUpdate);
+    clearInterval(checkTimer);
+    clearTimeout(applyTimer);
     window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
     window.removeEventListener('appinstalled', onAppInstalled);
     window.removeEventListener('online', onResume);
     document.removeEventListener('visibilitychange', onResume);
   }
 
-  return { start, stop, refreshPushState, enablePush, disablePush, togglePush, installApp };
+  return { start, stop, refreshPushState, enablePush, disablePush, togglePush, installApp, dismissUpdate, applyUpdate };
 }

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -126,7 +127,7 @@ func (s *Store) save(m model.Message, chatName, chatType string, live bool) (boo
 	if err != nil {
 		return false, err
 	}
-	_, e = tx.Exec(`INSERT INTO message_context(message_id,raw_payload,info_json,history_payload,original_chat,original_sender,reply_json) VALUES(?,?,?,?,?,?,?) ON CONFLICT(message_id) DO UPDATE SET raw_payload=COALESCE(excluded.raw_payload,message_context.raw_payload),info_json=COALESCE(excluded.info_json,message_context.info_json),history_payload=COALESCE(excluded.history_payload,message_context.history_payload),original_chat=CASE WHEN excluded.original_chat<>'' THEN excluded.original_chat ELSE message_context.original_chat END,original_sender=CASE WHEN excluded.original_sender<>'' THEN excluded.original_sender ELSE message_context.original_sender END,reply_json=CASE WHEN excluded.reply_json<>'null' THEN excluded.reply_json ELSE message_context.reply_json END`, m.ID, m.Raw, m.OriginalInfo, m.HistoryRaw, m.OriginalChat, m.OriginalSender, string(quote))
+	_, e = tx.Exec(`INSERT INTO message_context(message_id,raw_payload,info_json,history_payload,original_chat,original_sender,reply_json) VALUES(?,?,?,?,?,?,?) ON CONFLICT(message_id) DO UPDATE SET raw_payload=CASE WHEN (SELECT type FROM messages WHERE id=excluded.message_id)='live_location' THEN COALESCE(message_context.raw_payload,excluded.raw_payload) ELSE COALESCE(excluded.raw_payload,message_context.raw_payload) END,info_json=COALESCE(excluded.info_json,message_context.info_json),history_payload=COALESCE(excluded.history_payload,message_context.history_payload),original_chat=CASE WHEN excluded.original_chat<>'' THEN excluded.original_chat ELSE message_context.original_chat END,original_sender=CASE WHEN excluded.original_sender<>'' THEN excluded.original_sender ELSE message_context.original_sender END,reply_json=CASE WHEN excluded.reply_json<>'null' THEN excluded.reply_json ELSE message_context.reply_json END`, m.ID, m.Raw, m.OriginalInfo, m.HistoryRaw, m.OriginalChat, m.OriginalSender, string(quote))
 	if e != nil {
 		return false, e
 	}
@@ -360,38 +361,23 @@ ORDER BY timestamp-lower_ts DESC LIMIT 1`
 }
 
 func (s *Store) Messages(chat string, limit int, before *int64, beforeID string) ([]map[string]any, error) {
-	chat = s.ResolveChat(chat)
-	q := `SELECT m.id,m.whatsapp_id,m.chat_id,m.sender_id,m.sender_name,m.from_me,m.type,m.body,m.has_media,m.media_mime,m.media_filename,m.timestamp,m.created_at,md.id,md.status,md.mime_type,md.filename FROM messages m LEFT JOIN media md ON md.message_id=m.id WHERE m.chat_id=?`
-	a := []any{chat}
+	query := messageProjection + ` WHERE m.chat_id=?`
+	args := []any{s.ResolveChat(chat)}
 	if before != nil && beforeID != "" {
-		q += ` AND (m.timestamp<? OR (m.timestamp=? AND m.id<?))`
-		a = append(a, *before, *before, beforeID)
+		query += ` AND (m.timestamp,m.id)<(?,?)`
+		args = append(args, *before, beforeID)
 	} else if before != nil {
-		q += ` AND m.timestamp<?`
-		a = append(a, *before)
+		query += ` AND m.timestamp<?`
+		args = append(args, *before)
 	}
-	q += ` ORDER BY m.timestamp DESC,m.id DESC LIMIT ?`
-	a = append(a, limit)
-	r, e := s.DB.Query(q, a...)
-	if e != nil {
-		return nil, e
+	query += ` ORDER BY m.timestamp DESC,m.id DESC LIMIT ?`
+	rows, err := s.queryMessages(query, append(args, limit)...)
+	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+		rows[i], rows[j] = rows[j], rows[i]
 	}
-	defer r.Close()
-	var out []map[string]any
-	for r.Next() {
-		var id, cid, typ string
-		var wa, sid, sn, body, mm, mf, mediaID, mediaStatus, mimeType, filename sql.NullString
-		var fm, hm, ts, created int64
-		if e = r.Scan(&id, &wa, &cid, &sid, &sn, &fm, &typ, &body, &hm, &mm, &mf, &ts, &created, &mediaID, &mediaStatus, &mimeType, &filename); e != nil {
-			return nil, e
-		}
-		out = append(out, map[string]any{"id": id, "whatsapp_id": nullable(wa), "chat_id": cid, "sender_id": nullable(sid), "sender_name": nullable(sn), "from_me": fm, "type": typ, "body": nullable(body), "has_media": hm, "media_mime": nullable(mm), "media_filename": nullable(mf), "timestamp": ts, "created_at": created, "media_id": nullable(mediaID), "media_status": nullable(mediaStatus), "mime_type": nullable(mimeType), "filename": nullable(filename)})
-	}
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
-	return out, r.Err()
+	return rows, err
 }
+
 func (s *Store) Health() error {
 	var result string
 	if err := s.DB.QueryRow(`PRAGMA quick_check`).Scan(&result); err != nil {
@@ -489,30 +475,33 @@ func (s *Store) Media(id string) (*MediaRow, error) {
 var urlRE = regexp.MustCompile(`https?://[^\s<>()]+`)
 
 func (s *Store) Search(q string, limit int) (map[string]any, error) {
-	q = strings.TrimSpace(q)
+	return s.SearchContext(context.Background(), q, limit, "")
+}
+
+func (s *Store) SearchContext(ctx context.Context, q string, limit int, chat string) (map[string]any, error) {
 	if limit < 1 {
 		limit = 50
 	}
 	if limit > 100 {
 		limit = 100
 	}
-	like := "%" + q + "%"
-	cr, err := s.DB.Query(`SELECT id,name,type,last_message_at FROM chats c WHERE `+openChatSQL+` AND COALESCE(name,'') LIKE ? COLLATE NOCASE ORDER BY COALESCE(last_message_at,0) DESC LIMIT ?`, like, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer cr.Close()
+	like := "%" + strings.TrimSpace(q) + "%"
 	chats := []map[string]any{}
-	for cr.Next() {
-		var id, typ string
-		var name sql.NullString
-		var ts sql.NullInt64
-		if err = cr.Scan(&id, &name, &typ, &ts); err != nil {
+	query := `SELECT m.id,m.chat_id,c.name,m.body,m.timestamp FROM messages m JOIN chats c ON c.id=m.chat_id WHERE `
+	args := []any{}
+	if chat != "" {
+		query += `m.chat_id=? AND `
+		args = append(args, s.ResolveChat(chat))
+	} else {
+		query += openChatSQL + ` AND `
+		var err error
+		chats, err = s.searchChats(ctx, like, limit)
+		if err != nil {
 			return nil, err
 		}
-		chats = append(chats, map[string]any{"id": id, "name": nullable(name), "type": typ, "last_message_at": nullableInt(ts)})
 	}
-	mr, err := s.DB.Query(`SELECT m.id,m.chat_id,c.name,m.body,m.timestamp FROM messages m JOIN chats c ON c.id=m.chat_id WHERE `+openChatSQL+` AND COALESCE(m.body,'') LIKE ? COLLATE NOCASE ORDER BY m.timestamp DESC LIMIT ?`, like, limit)
+	query += `COALESCE(m.body,'') LIKE ? COLLATE NOCASE ORDER BY m.timestamp DESC,m.id DESC LIMIT ?`
+	mr, err := s.DB.QueryContext(ctx, query, append(args, like, limit)...)
 	if err != nil {
 		return nil, err
 	}
@@ -527,7 +516,26 @@ func (s *Store) Search(q string, limit int) (map[string]any, error) {
 		}
 		messages = append(messages, map[string]any{"id": id, "chat_id": cid, "chat_name": nullable(cn), "body": body, "timestamp": ts})
 	}
-	return map[string]any{"chats": chats, "messages": messages}, nil
+	return map[string]any{"chats": chats, "messages": messages}, mr.Err()
+}
+
+func (s *Store) searchChats(ctx context.Context, like string, limit int) ([]map[string]any, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,name,type,last_message_at FROM chats c WHERE `+openChatSQL+` AND COALESCE(name,'') LIKE ? COLLATE NOCASE ORDER BY COALESCE(last_message_at,0) DESC LIMIT ?`, like, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	chats := []map[string]any{}
+	for rows.Next() {
+		var id, typ string
+		var name sql.NullString
+		var ts sql.NullInt64
+		if err := rows.Scan(&id, &name, &typ, &ts); err != nil {
+			return nil, err
+		}
+		chats = append(chats, map[string]any{"id": id, "name": nullable(name), "type": typ, "last_message_at": nullableInt(ts)})
+	}
+	return chats, rows.Err()
 }
 
 func (s *Store) GalleryMedia(chat, kind string, limit int) ([]map[string]any, error) {
@@ -596,52 +604,29 @@ func (s *Store) Links(chat string, limit int) ([]map[string]any, error) {
 	return out, rows.Err()
 }
 func (s *Store) MessageContext(chat, id string, radius int) ([]map[string]any, error) {
-	chat = s.ResolveChat(chat)
-	var ts int64
-	if e := s.DB.QueryRow(`SELECT timestamp FROM messages WHERE id=? AND chat_id=?`, id, chat).Scan(&ts); e != nil {
-		return nil, e
-	}
 	if radius < 1 {
 		radius = 25
 	}
-	// Reuse Messages around target by selecting a bounded window and returning chronological rows.
-	r, e := s.DB.Query(`SELECT id FROM messages WHERE chat_id=? ORDER BY ABS(timestamp-?) ASC LIMIT ?`, chat, ts, radius*2+1)
-	if e != nil {
-		return nil, e
+	query := `WITH target AS (
+		SELECT id,chat_id,timestamp FROM messages WHERE id=? AND chat_id=?
+	), older AS (
+		SELECT m.id FROM messages m JOIN target t ON m.chat_id=t.chat_id
+		WHERE (m.timestamp,m.id)<(t.timestamp,t.id)
+		ORDER BY m.timestamp DESC,m.id DESC LIMIT ?
+	), newer AS (
+		SELECT m.id FROM messages m JOIN target t ON m.chat_id=t.chat_id
+		WHERE (m.timestamp,m.id)>(t.timestamp,t.id)
+		ORDER BY m.timestamp,m.id LIMIT ?
+	) ` + messageProjection + `
+	WHERE m.id IN (SELECT id FROM target UNION ALL SELECT id FROM older UNION ALL SELECT id FROM newer)
+	ORDER BY m.timestamp,m.id`
+	rows, err := s.queryMessages(query, id, s.ResolveChat(chat), radius, radius)
+	if err == nil && len(rows) == 0 {
+		err = sql.ErrNoRows
 	}
-	ids := []string{}
-	for r.Next() {
-		var x string
-		_ = r.Scan(&x)
-		ids = append(ids, x)
-	}
-	r.Close()
-	if len(ids) == 0 {
-		return []map[string]any{}, nil
-	}
-	ph := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
-	args := []any{chat}
-	for _, x := range ids {
-		args = append(args, x)
-	}
-	q := `SELECT m.id,m.whatsapp_id,m.chat_id,m.sender_id,m.sender_name,m.from_me,m.type,m.body,m.has_media,m.media_mime,m.media_filename,m.timestamp,m.created_at,md.id,md.status,md.mime_type,md.filename FROM messages m LEFT JOIN media md ON md.message_id=m.id WHERE m.chat_id=? AND m.id IN (` + ph + `) ORDER BY m.timestamp ASC,m.id ASC`
-	rr, e := s.DB.Query(q, args...)
-	if e != nil {
-		return nil, e
-	}
-	defer rr.Close()
-	out := []map[string]any{}
-	for rr.Next() {
-		var iid, cid, typ string
-		var wa, sid, sn, body, mm, mf, mediaID, mediaStatus, mimeType, filename sql.NullString
-		var fm, hm, t, created int64
-		if e = rr.Scan(&iid, &wa, &cid, &sid, &sn, &fm, &typ, &body, &hm, &mm, &mf, &t, &created, &mediaID, &mediaStatus, &mimeType, &filename); e != nil {
-			return nil, e
-		}
-		out = append(out, map[string]any{"id": iid, "whatsapp_id": nullable(wa), "chat_id": cid, "sender_id": nullable(sid), "sender_name": nullable(sn), "from_me": fm, "type": typ, "body": nullable(body), "has_media": hm, "media_mime": nullable(mm), "media_filename": nullable(mf), "timestamp": t, "created_at": created, "media_id": nullable(mediaID), "media_status": nullable(mediaStatus), "mime_type": nullable(mimeType), "filename": nullable(filename)})
-	}
-	return out, rr.Err()
+	return rows, err
 }
+
 func (s *Store) SaveMediaPayload(messageID string, payload []byte) error {
 	if len(payload) == 0 {
 		return nil
