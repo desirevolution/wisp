@@ -194,56 +194,12 @@ func (s *Store) ResolveChat(id string) string {
 	}
 	return id
 }
-func (s *Store) TrimChat(chat string, keep int) error {
-	if keep < 1 {
-		return nil
-	}
-	_, e := s.DB.Exec(`DELETE FROM messages WHERE chat_id=? AND id NOT IN (SELECT id FROM messages WHERE chat_id=? ORDER BY timestamp DESC,id DESC LIMIT ?)`, chat, chat, keep)
-	return e
+func (s *Store) ChatExists(id string) (bool, error) {
+	var exists bool
+	err := s.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM chats WHERE id=?)`, id).Scan(&exists)
+	return exists, err
 }
 
-// PruneChats keeps only the most recently active chats. It is used only while
-// processing WhatsApp's initial history bootstrap; live chats are never pruned.
-func (s *Store) PruneChats(keep int) (int, error) {
-	if keep < 1 {
-		return 0, nil
-	}
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-	rows, err := tx.Query(`SELECT id FROM chats ORDER BY COALESCE(last_message_at,0) DESC,id DESC LIMIT -1 OFFSET ?`, keep)
-	if err != nil {
-		return 0, err
-	}
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		ids = append(ids, id)
-	}
-	if err = rows.Err(); err != nil {
-		rows.Close()
-		return 0, err
-	}
-	rows.Close()
-	for _, id := range ids {
-		if _, err = tx.Exec(`DELETE FROM messages WHERE chat_id=?`, id); err != nil {
-			return 0, err
-		}
-		if _, err = tx.Exec(`DELETE FROM chats WHERE id=?`, id); err != nil {
-			return 0, err
-		}
-	}
-	if err = tx.Commit(); err != nil {
-		return 0, err
-	}
-	return len(ids), nil
-}
 func (s *Store) MessageByID(id string) (*model.Message, error) {
 	var m model.Message
 	var sid, sn sql.NullString

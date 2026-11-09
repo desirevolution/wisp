@@ -55,7 +55,9 @@ The message JSON contract is documented in [api-contract.md](api-contract.md).
 
 ## Product limits
 
-- Initial import: default 10 chats × 50 messages, older history on demand.
+- Automatic history import: up to 10 new chats after startup or pairing, and up
+  to 50 incoming messages per chat in each batch by default. Existing local history
+  is retained. Older history can be requested on demand.
 - Incoming media: default 100 MiB; image uploads: 10 MiB and 20 megapixels,
   independently of the incoming-media setting.
 - One PNG/JPEG per outgoing image message; text/caption limit 4,000 characters.

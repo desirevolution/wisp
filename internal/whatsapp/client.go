@@ -65,6 +65,8 @@ type Service struct {
 	mediaRoot              string
 	maxMediaBytes          int64
 	rootCtx                context.Context
+	historyImportMu        sync.Mutex
+	bootstrapNewChats      int
 	initialSyncMu          sync.Mutex
 	initialSyncGeneration  uint64
 }
@@ -138,6 +140,9 @@ func (s *Service) Start(ctx context.Context, path string) error {
 	return nil
 }
 func (s *Service) startPairing(ctx context.Context) error {
+	s.historyImportMu.Lock()
+	s.bootstrapNewChats = 0
+	s.historyImportMu.Unlock()
 	s.mu.Lock()
 	s.status.InitialBootstrap = true
 	s.mu.Unlock()
@@ -465,28 +470,8 @@ func (s *Service) onHistory(e *events.HistorySync) {
 	if !onDemand {
 		s.setSync(true, "importing_history")
 	}
-	total := 0
-	skipped := 0
-	for _, conv := range e.Data.GetConversations() {
-		if conv == nil {
-			continue
-		}
-		n := s.importConversation(conv, onDemand)
-		if n < 0 {
-			skipped++
-			continue
-		}
-		total += n
-	}
-	pruned := 0
-	if !onDemand {
-		if n, err := s.store.PruneChats(s.initialChatLimit); err != nil {
-			fmt.Printf("[wisp] prune bootstrap chats: %v\n", err)
-		} else {
-			pruned = n
-		}
-	}
-	fmt.Printf("[wisp] history sync type=%s conversations=%d imported=%d skipped=%d pruned_chats=%d\n", e.Data.GetSyncType().String(), len(e.Data.GetConversations()), total, skipped, pruned)
+	total, skipped, limited := s.importHistoryBatch(e.Data.GetConversations(), onDemand)
+	fmt.Printf("[wisp] history sync type=%s conversations=%d imported=%d skipped=%d limited_chats=%d\n", e.Data.GetSyncType().String(), len(e.Data.GetConversations()), total, skipped, limited)
 	// One coarse event is enough for the browser to refresh the chat list. Do not
 	// emit thousands of message events while importing history.
 	s.bus.Publish(buspkg.Event{Type: "metadata", Data: map[string]any{"reason": "history_sync", "imported": total}})
@@ -501,6 +486,71 @@ func (s *Service) onHistory(e *events.HistorySync) {
 		}
 		s.historyMu.Unlock()
 	}
+}
+
+// The bootstrap budget admits new chats without removing anything already in
+// Wisp. A relink starts a new budget, while additional batches share it.
+func (s *Service) importHistoryBatch(conversations []*waHistorySync.Conversation, onDemand bool) (total, skipped, limited int) {
+	if !onDemand {
+		s.historyImportMu.Lock()
+		defer s.historyImportMu.Unlock()
+		conversations = newestHistoryConversations(conversations)
+	}
+	for _, conv := range conversations {
+		if conv == nil || shouldIgnoreHistoryChat(conv.GetID()) {
+			skipped++
+			continue
+		}
+		newChat := false
+		var chat types.JID
+		if !onDemand {
+			chat = s.historyChatJID(conv)
+			if chat.IsEmpty() {
+				skipped++
+				continue
+			}
+			exists, err := s.store.ChatExists(chat.String())
+			if err != nil {
+				fmt.Printf("[history] local chat lookup failed: %v\n", err)
+				skipped++
+				continue
+			}
+			newChat = !exists
+			if newChat && s.bootstrapNewChats >= s.initialChatLimit {
+				limited++
+				continue
+			}
+		}
+		n := s.importConversation(conv, onDemand)
+		if n < 0 {
+			skipped++
+			continue
+		}
+		total += n
+		if newChat {
+			// A revoke can create a chat with a placeholder even when n is zero.
+			exists, err := s.store.ChatExists(chat.String())
+			if err != nil {
+				fmt.Printf("[history] imported chat lookup failed: %v\n", err)
+			}
+			if n > 0 || exists {
+				s.bootstrapNewChats++
+			}
+		}
+	}
+	return total, skipped, limited
+}
+
+func newestHistoryConversations(conversations []*waHistorySync.Conversation) []*waHistorySync.Conversation {
+	sorted := append([]*waHistorySync.Conversation(nil), conversations...)
+	latest := make(map[*waHistorySync.Conversation]uint64, len(sorted))
+	for _, conv := range sorted {
+		for _, msg := range conv.GetMessages() {
+			latest[conv] = max(latest[conv], msg.GetMessage().GetMessageTimestamp())
+		}
+	}
+	sort.SliceStable(sorted, func(i, j int) bool { return latest[sorted[i]] > latest[sorted[j]] })
+	return sorted
 }
 
 // scheduleInitialSyncFinalize debounces WhatsApp's bootstrap HistorySync batches.
@@ -552,8 +602,10 @@ func (s *Service) finalizeInitialSync(generation uint64) {
 	}
 
 	checked, healed := 0, 0
-	// Only bootstrap-retained chats are relevant. Chats() is newest-first and the
-	// initial import has already been pruned to initialChatLimit.
+	// Check the most recent chats without scanning the whole local archive.
+	if len(chats) > s.initialChatLimit {
+		chats = chats[:s.initialChatLimit]
+	}
 	for _, row := range chats {
 		id, _ := row["id"].(string)
 		if id == "" {
@@ -717,24 +769,29 @@ func (s *Service) normalizeHistoryMessage(ctx context.Context, w *waWeb.WebMessa
 	return &normalizedHistoryMessage{Message: m, Raw: w.GetMessage(), Kind: m.Type, Wrapper: wrapper}, ""
 }
 
+func (s *Service) historyChatJID(conv *waHistorySync.Conversation) types.JID {
+	id := conv.GetID()
+	if conv.GetPnJID() != "" {
+		id = conv.GetPnJID()
+	}
+	jid, err := types.ParseJID(id)
+	if err != nil {
+		return types.JID{}
+	}
+	return s.canonicalJID(context.Background(), jid)
+}
+
 func (s *Service) importConversation(conv *waHistorySync.Conversation, onDemand bool) int {
 	rawID := conv.GetID()
 	if shouldIgnoreHistoryChat(rawID) {
 		return -1
 	}
-	canonical := rawID
-	if conv.GetPnJID() != "" {
-		canonical = conv.GetPnJID()
-	}
-	chatJID, err := types.ParseJID(canonical)
-	if err != nil {
+	chatJID := s.historyChatJID(conv)
+	if chatJID.IsEmpty() {
 		return 0
 	}
+	canonical := chatJID.String()
 	rawJID, _ := types.ParseJID(rawID)
-	if chatJID.Server == types.HiddenUserServer {
-		chatJID = s.canonicalJID(context.Background(), chatJID)
-		canonical = chatJID.String()
-	}
 	name := conv.GetDisplayName()
 	if name == "" {
 		name = conv.GetName()
@@ -846,9 +903,6 @@ func (s *Service) importConversation(conv *waHistorySync.Conversation, onDemand 
 		_ = s.store.AddAlias(conv.GetPnJID(), canonical, "pn")
 	}
 	_ = s.store.AddAlias(canonical, canonical, jidKind(chatJID))
-	if !onDemand {
-		_ = s.store.TrimChat(canonical, s.initialMessagesPerChat)
-	}
 	// Paging anchors come from the concrete API beforeId/beforeTs boundary.
 	// Bootstrap and ON_DEMAND imports never move an independent cursor.
 	if onDemand {
